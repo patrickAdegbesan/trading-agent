@@ -4,7 +4,7 @@
   "description": "An autonomous crypto trading agent with a self-improving algorithmic trading system.",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc --project tsconfig.dashboard.json",
     "postinstall": "npm run build",
     "start": "node dist/main.js",
     "dev": "ts-node src/main.ts",
