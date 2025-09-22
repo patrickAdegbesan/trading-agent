@@ -9,6 +9,7 @@ const events_1 = require("events");
 class RedisService extends events_1.EventEmitter {
     constructor(redisUrl = process.env.REDIS_URL || 'redis://localhost:6379') {
         super();
+        this.client = null;
         this.isConnected = false;
         this.stats = {
             hits: 0,
@@ -17,6 +18,14 @@ class RedisService extends events_1.EventEmitter {
             totalOperations: 0,
             connectionStatus: 'disconnected'
         };
+        // Check if Redis is available in the environment
+        if (!process.env.REDIS_URL && process.env.NODE_ENV === 'production') {
+            console.log('🔧 Redis not configured in production - running in fallback mode only');
+            this.isConnected = false;
+            // Don't create Redis client if not configured
+            return;
+        }
+        console.log(`🔗 Initializing Redis connection: ${redisUrl.replace(/\/\/.*@/, '//***@')}`);
         this.client = new ioredis_1.default(redisUrl, {
             maxRetriesPerRequest: 3,
             lazyConnect: true,
@@ -28,6 +37,8 @@ class RedisService extends events_1.EventEmitter {
         this.setupEventHandlers();
     }
     setupEventHandlers() {
+        if (!this.client)
+            return; // Skip if no client initialized
         this.client.on('connect', () => {
             this.isConnected = true;
             this.stats.connectionStatus = 'connected';
@@ -54,6 +65,8 @@ class RedisService extends events_1.EventEmitter {
         this.connectWithTimeout();
     }
     async connectWithTimeout() {
+        if (!this.client)
+            return;
         try {
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => reject(new Error('Connection timeout')), 5000);
@@ -70,8 +83,8 @@ class RedisService extends events_1.EventEmitter {
      * Health check for Redis connection
      */
     async healthCheck() {
-        if (!this.isConnected) {
-            return { connected: false, error: 'Redis not connected' };
+        if (!this.client || !this.isConnected) {
+            return { connected: false, error: 'Redis not configured or connected' };
         }
         try {
             const start = Date.now();
@@ -95,6 +108,10 @@ class RedisService extends events_1.EventEmitter {
      * Force reconnection attempt
      */
     async reconnect() {
+        if (!this.client) {
+            console.log('🔧 Redis not configured - skipping reconnection');
+            return false;
+        }
         try {
             console.log('🔄 Attempting Redis reconnection...');
             await this.client.disconnect();
@@ -107,6 +124,8 @@ class RedisService extends events_1.EventEmitter {
         }
     }
     async connect() {
+        if (!this.client)
+            return;
         try {
             await this.client.connect();
         }
@@ -123,7 +142,7 @@ class RedisService extends events_1.EventEmitter {
      * Get value from cache with automatic fallback
      */
     async get(key, options) {
-        if (!this.isConnected) {
+        if (!this.client || !this.isConnected) {
             this.updateStats('miss');
             return null;
         }
@@ -149,7 +168,7 @@ class RedisService extends events_1.EventEmitter {
      * Set value in cache with TTL
      */
     async set(key, value, options) {
-        if (!this.isConnected) {
+        if (!this.client || !this.isConnected) {
             return false;
         }
         try {
@@ -187,7 +206,7 @@ class RedisService extends events_1.EventEmitter {
      * Delete key from cache
      */
     async delete(key, options) {
-        if (!this.isConnected) {
+        if (!this.client || !this.isConnected) {
             return false;
         }
         try {
@@ -204,7 +223,7 @@ class RedisService extends events_1.EventEmitter {
      * Clear all keys with prefix
      */
     async clear(prefix) {
-        if (!this.isConnected) {
+        if (!this.client || !this.isConnected) {
             return 0;
         }
         try {
@@ -225,7 +244,7 @@ class RedisService extends events_1.EventEmitter {
      * Check if key exists
      */
     async exists(key, options) {
-        if (!this.isConnected) {
+        if (!this.client || !this.isConnected) {
             return false;
         }
         try {
