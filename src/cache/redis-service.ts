@@ -25,15 +25,16 @@ export class RedisService extends EventEmitter {
         connectionStatus: 'disconnected'
     };
 
-    constructor(redisUrl: string = 'redis://localhost:6379') {
+    constructor(redisUrl: string = process.env.REDIS_URL || 'redis://localhost:6379') {
         super();
         
         this.client = new Redis(redisUrl, {
-            maxRetriesPerRequest: 1,
+            maxRetriesPerRequest: 3,
             lazyConnect: true,
-            enableAutoPipelining: true,
-            connectTimeout: 2000,
-            reconnectOnError: () => false, // Disable reconnection
+            connectTimeout: 5000,
+            enableReadyCheck: false,
+            enableOfflineQueue: false,
+            reconnectOnError: () => false // Disable automatic reconnection
         });
 
         this.setupEventHandlers();
@@ -65,6 +66,65 @@ export class RedisService extends EventEmitter {
             this.stats.connectionStatus = 'connecting';
             console.log('🔄 Redis reconnecting...');
         });
+
+        // Attempt initial connection with timeout
+        this.connectWithTimeout();
+    }
+
+    private async connectWithTimeout(): Promise<void> {
+        try {
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Connection timeout')), 5000);
+            });
+            
+            await Promise.race([this.client.connect(), timeoutPromise]);
+            console.log('✅ Redis connected successfully');
+        } catch (error: any) {
+            console.warn('⚠️ Redis connection failed, using fallback mode:', error.message);
+            this.isConnected = false;
+        }
+    }
+
+    /**
+     * Health check for Redis connection
+     */
+    async healthCheck(): Promise<{ connected: boolean; latency?: number; error?: string }> {
+        if (!this.isConnected) {
+            return { connected: false, error: 'Redis not connected' };
+        }
+
+        try {
+            const start = Date.now();
+            await this.client.ping();
+            const latency = Date.now() - start;
+            
+            return { 
+                connected: true, 
+                latency 
+            };
+        } catch (error: any) {
+            console.warn('Redis health check failed:', error.message);
+            this.isConnected = false;
+            return { 
+                connected: false, 
+                error: error.message 
+            };
+        }
+    }
+
+    /**
+     * Force reconnection attempt
+     */
+    async reconnect(): Promise<boolean> {
+        try {
+            console.log('🔄 Attempting Redis reconnection...');
+            await this.client.disconnect();
+            await this.connectWithTimeout();
+            return this.isConnected;
+        } catch (error: any) {
+            console.warn('⚠️ Redis reconnection failed:', error.message);
+            return false;
+        }
     }
 
     async connect(): Promise<void> {

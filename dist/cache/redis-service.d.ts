@@ -16,6 +16,19 @@ export declare class RedisService extends EventEmitter {
     private stats;
     constructor(redisUrl?: string);
     private setupEventHandlers;
+    private connectWithTimeout;
+    /**
+     * Health check for Redis connection
+     */
+    healthCheck(): Promise<{
+        connected: boolean;
+        latency?: number;
+        error?: string;
+    }>;
+    /**
+     * Force reconnection attempt
+     */
+    reconnect(): Promise<boolean>;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     /**

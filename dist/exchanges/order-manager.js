@@ -123,6 +123,21 @@ class OrderManager extends events_1.EventEmitter {
         }
         catch (error) {
             console.error(`❌ Failed to place market order:`, error);
+            // Handle specific Binance errors
+            if (error.message?.includes('LOT_SIZE') || error.message?.includes('Filter failure: LOT_SIZE')) {
+                console.error(`🚫 LOT_SIZE filter violation for ${symbol}:`, error.message);
+                console.log(`Original quantity: ${quantity}, formatted: ${this.formatQuantity(symbol, quantity)}`);
+                return {
+                    success: false,
+                    reason: `LOT_SIZE filter violation: Quantity ${quantity} invalid for ${symbol}. Check minimum order size requirements.`
+                };
+            }
+            if (error.message?.includes('NOTIONAL') || error.message?.includes('MIN_NOTIONAL')) {
+                return {
+                    success: false,
+                    reason: `Order value too small: Minimum notional value not met for ${symbol}`
+                };
+            }
             return {
                 success: false,
                 reason: `Market order failed: ${error.message}`
@@ -323,30 +338,56 @@ class OrderManager extends events_1.EventEmitter {
             console.error(`Invalid quantity received: ${quantity} for ${symbol}`);
             throw new Error(`Invalid quantity: ${quantity}. Must be a positive finite number.`);
         }
-        // Default precision rules - adjusted for actual Binance requirements
+        // Enhanced lot size validation based on Binance requirements
         let formattedQuantity;
-        if (symbol.includes('BTC')) {
-            formattedQuantity = quantity.toFixed(5); // BTCUSDT requires 5 decimals (0.00001)
+        let minQuantity;
+        let stepSize;
+        // Symbol-specific lot size rules (based on actual Binance filters)
+        if (symbol === 'BTCUSDT') {
+            minQuantity = 0.00001; // Minimum quantity: 0.00001 BTC
+            stepSize = 0.00001; // Step size: 0.00001 BTC
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(5);
         }
-        else if (symbol.includes('ETH')) {
-            // ETHUSDT has different lot size requirements: minimum 0.0001 ETH (4 decimals)
-            formattedQuantity = quantity.toFixed(4); // ETHUSDT requires 4 decimals (0.0001)
+        else if (symbol === 'ETHUSDT') {
+            minQuantity = 0.0001; // Minimum quantity: 0.0001 ETH
+            stepSize = 0.0001; // Step size: 0.0001 ETH
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(4);
+        }
+        else if (symbol.includes('USDT')) {
+            minQuantity = 0.001; // Default for USDT pairs
+            stepSize = 0.001;
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(3);
         }
         else {
-            formattedQuantity = quantity.toFixed(3); // Other pairs typically 3 decimals
+            minQuantity = 0.001; // Conservative default
+            stepSize = 0.001;
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(3);
         }
         // Final validation - ensure we don't have NaN in the formatted string
         if (formattedQuantity === 'NaN' || formattedQuantity.includes('NaN')) {
             console.error(`Formatted quantity is NaN for ${symbol}, original: ${quantity}`);
             throw new Error(`Cannot format quantity ${quantity} - resulted in NaN`);
         }
-        // Ensure minimum order sizes
+        // Validate against minimum order requirements
         const numericValue = parseFloat(formattedQuantity);
-        if (numericValue < 0.000001) { // Minimum viable trade size
-            console.warn(`Quantity ${formattedQuantity} too small for ${symbol}, adjusting to minimum`);
-            formattedQuantity = '0.000001';
+        if (numericValue < minQuantity) {
+            console.warn(`Quantity ${formattedQuantity} below minimum ${minQuantity} for ${symbol}, adjusting`);
+            formattedQuantity = minQuantity.toFixed(symbol === 'BTCUSDT' ? 5 : symbol === 'ETHUSDT' ? 4 : 3);
         }
+        console.log(`📊 Formatted quantity for ${symbol}: ${quantity} → ${formattedQuantity}`);
         return formattedQuantity;
+    }
+    /**
+     * Round quantity to valid step size (LOT_SIZE filter compliance)
+     */
+    roundToStepSize(quantity, minQuantity, stepSize) {
+        // Ensure quantity meets minimum requirement
+        if (quantity < minQuantity) {
+            return minQuantity;
+        }
+        // Round to nearest valid step
+        const steps = Math.floor((quantity - minQuantity) / stepSize);
+        return minQuantity + (steps * stepSize);
     }
     /**
      * Get statistics about trading activity

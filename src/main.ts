@@ -97,6 +97,28 @@ async function main() {
 
         console.log('✅ System initialized successfully!');
         
+        // Initialize Redis health monitoring
+        console.log('🔧 Setting up Redis health monitoring...');
+        setInterval(async () => {
+            try {
+                const health = await redisService.healthCheck();
+                if (!health.connected) {
+                    console.warn('⚠️ Redis health check failed:', health.error);
+                    console.log('🔄 Attempting Redis reconnection...');
+                    const reconnected = await redisService.reconnect();
+                    if (reconnected) {
+                        console.log('✅ Redis reconnected successfully');
+                    } else {
+                        console.warn('❌ Redis reconnection failed - continuing with fallback mode');
+                    }
+                } else if (health.latency && health.latency > 100) {
+                    console.warn(`⚠️ Redis latency high: ${health.latency}ms`);
+                }
+            } catch (error: any) {
+                console.warn('Redis health monitoring error:', error.message);
+            }
+        }, 60000); // Check every minute
+        
         // Initialize trading dashboard
         console.log('🖥️ Starting trading dashboard...');
         const dashboard = new TradingDashboard(orderManager, portfolioManager);

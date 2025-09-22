@@ -101,6 +101,10 @@ export declare class OrderManager extends EventEmitter {
      */
     private formatQuantity;
     /**
+     * Round quantity to valid step size (LOT_SIZE filter compliance)
+     */
+    private roundToStepSize;
+    /**
      * Get statistics about trading activity
      */
     getTradingStats(): {
