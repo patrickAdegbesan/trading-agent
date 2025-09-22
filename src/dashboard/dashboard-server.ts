@@ -75,14 +75,29 @@ export class DashboardServer {
     private async initializeStats() {
         try {
             // Initialize current stats from database
-            const trades = await this.databaseService.getTrades();
+            const allTrades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
             
+            // Filter out old test data
+            const validTrades = allTrades.filter((trade: any) => {
+                // Filter out trades with unrealistic prices (test data)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 80000) return false;
+                if (trade.symbol === 'ETHUSDT' && trade.price < 2000) return false;
+                
+                // Filter out very old trades (older than 7 days)
+                const tradeDate = new Date(trade.timestamp);
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                if (tradeDate < sevenDaysAgo) return false;
+                
+                return true;
+            });
+            
             this.currentStats = {
-                totalTrades: trades.length,
-                activeTrades: trades.filter((t: any) => t.status === 'PENDING').length,
+                totalTrades: validTrades.length,
+                activeTrades: validTrades.filter((t: any) => t.status === 'PENDING').length,
                 totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
-                winRate: this.calculateWinRate(trades),
+                winRate: this.calculateWinRate(validTrades),
                 lastUpdate: new Date().toISOString()
             };
         } catch (error) {
@@ -109,8 +124,23 @@ export class DashboardServer {
 
     private async getStats(req: express.Request, res: express.Response) {
         try {
-            const trades = await this.databaseService.getTrades();
+            const allTrades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
+            
+            // Filter out old test data
+            const validTrades = allTrades.filter((trade: any) => {
+                // Filter out trades with unrealistic prices (test data)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 80000) return false;
+                if (trade.symbol === 'ETHUSDT' && trade.price < 2000) return false;
+                
+                // Filter out very old trades (older than 7 days)
+                const tradeDate = new Date(trade.timestamp);
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                if (tradeDate < sevenDaysAgo) return false;
+                
+                return true;
+            });
             
             // Get active orders from OrderManager if available
             let activeOrdersCount = 0;
@@ -127,23 +157,23 @@ export class DashboardServer {
                 } catch (orderError) {
                     console.warn('Could not get active orders from OrderManager:', orderError);
                     // Fallback to database pending trades
-                    activeOrdersCount = trades.filter((t: any) => t.status === 'PENDING').length;
+                    activeOrdersCount = validTrades.filter((t: any) => t.status === 'PENDING').length;
                 }
             } else {
                 // Fallback to database pending trades
-                activeOrdersCount = trades.filter((t: any) => t.status === 'PENDING').length;
+                activeOrdersCount = validTrades.filter((t: any) => t.status === 'PENDING').length;
             }
             
             const stats = {
-                totalTrades: trades.length,
+                totalTrades: validTrades.length,
                 activeTrades: activeOrdersCount,
-                completedTrades: trades.filter((t: any) => t.status === 'FILLED').length,
-                totalVolume: trades.reduce((sum: number, t: any) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
+                completedTrades: validTrades.filter((t: any) => t.status === 'FILLED').length,
+                totalVolume: validTrades.reduce((sum: number, t: any) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
                 totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
-                winRate: this.calculateWinRate(trades),
-                averageHoldTime: this.calculateAverageHoldTime(trades),
-                bestTrade: this.getBestTrade(trades),
-                worstTrade: this.getWorstTrade(trades),
+                winRate: this.calculateWinRate(validTrades),
+                averageHoldTime: this.calculateAverageHoldTime(validTrades),
+                bestTrade: this.getBestTrade(validTrades),
+                worstTrade: this.getWorstTrade(validTrades),
                 dailyPnL: this.getDailyPnL(performance),
                 lastUpdate: new Date().toISOString()
             };
@@ -160,6 +190,21 @@ export class DashboardServer {
         try {
             const limit = parseInt(req.query.limit as string) || 50;
             const trades = await this.databaseService.getTrades();
+            
+            // Filter out old test data and clearly invalid trades
+            const validTrades = trades.filter((trade: any) => {
+                // Filter out trades with unrealistic prices (test data)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 80000) return false;
+                if (trade.symbol === 'ETHUSDT' && trade.price < 2000) return false;
+                
+                // Filter out very old trades (older than 7 days)
+                const tradeDate = new Date(trade.timestamp);
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                if (tradeDate < sevenDaysAgo) return false;
+                
+                return true;
+            });
             
             // Get active orders from OrderManager if available
             let activeOrders: any[] = [];
@@ -182,8 +227,8 @@ export class DashboardServer {
                 }
             }
             
-            // Combine completed trades and active orders
-            const allTrades = [...trades, ...activeOrders];
+            // Combine valid trades and active orders
+            const allTrades = [...validTrades, ...activeOrders];
             
             // Sort by timestamp descending and limit
             const recentTrades = allTrades
