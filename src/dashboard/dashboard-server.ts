@@ -251,43 +251,116 @@ export class DashboardServer {
 
     private async getLiveData(req: express.Request, res: express.Response) {
         try {
-            // Real-time market data
-            const liveData = {
-                prices: {
+            // Get real-time market data from data collector
+            let liveData: any = {
+                prices: {},
+                timestamp: new Date().toISOString()
+            };
+
+            if (this.dataCollector) {
+                try {
+                    const marketSnapshot = this.dataCollector.getMarketSnapshot();
+                    
+                    // Convert market snapshot to dashboard format
+                    for (const [symbol, data] of marketSnapshot.symbols) {
+                        if (data.close && data.volume) {
+                            // Calculate 24h change from available data
+                            const change24h = data.features?.priceChange24h || 
+                                            ((data.close - (data.open || data.close)) / (data.open || data.close) * 100);
+                            
+                            liveData.prices[symbol] = {
+                                price: data.close,
+                                change24h: parseFloat(change24h.toFixed(2)),
+                                volume: data.volume
+                            };
+                        }
+                    }
+                } catch (dataError) {
+                    console.warn('Could not get live market data from DataCollector:', dataError);
+                }
+            }
+            
+            // Fallback to static data if no real data available
+            if (Object.keys(liveData.prices).length === 0) {
+                liveData.prices = {
                     BTCUSDT: { price: 43250.50, change24h: 2.5, volume: 1250000 },
                     ETHUSDT: { price: 4187.73, change24h: -1.2, volume: 850000 },
                     ADAUSDT: { price: 0.8193, change24h: 0.8, volume: 45000000 },
                     SOLUSDT: { price: 145.25, change24h: 3.1, volume: 12000000 }
-                },
-                timestamp: new Date().toISOString()
-            };
+                };
+            }
             
             res.json(liveData);
         } catch (error) {
+            console.error('Failed to get live data:', error);
             res.status(500).json({ error: 'Failed to get live data' });
         }
     }
 
     private async getPortfolio(req: express.Request, res: express.Response) {
         try {
-            // Portfolio information
-            const portfolio = {
+            let portfolio: any = {
                 totalValue: 10000.00,
                 cash: 8500.00,
-                positions: [
-                    { symbol: 'BTCUSDT', quantity: 0.0347, value: 1500.00, pnl: 45.50 },
-                    { symbol: 'ETHUSDT', quantity: 0.0, value: 0.00, pnl: 0.00 }
-                ],
-                allocation: {
-                    BTC: 15.0,
-                    ETH: 0.0,
-                    Cash: 85.0
-                },
+                positions: [],
+                allocation: {},
                 lastUpdate: new Date().toISOString()
             };
+
+            if (this.portfolioManager) {
+                try {
+                    // Get real portfolio data
+                    const balances = await this.portfolioManager.getBalances();
+                    const positions = await this.portfolioManager.getPositions();
+                    
+                    // Calculate total value
+                    let totalValue = 0;
+                    let cash = balances.USDT || 0;
+                    totalValue += cash;
+                    
+                    // Process positions
+                    const portfolioPositions = [];
+                    const allocation: any = { Cash: cash };
+                    
+                    for (const position of positions) {
+                        if (position.quantity > 0) {
+                            const currentPrice = this.dataCollector?.getLastPrice(position.symbol) || 0;
+                            const value = position.quantity * currentPrice;
+                            const pnl = value - (position.averagePrice * position.quantity);
+                            
+                            portfolioPositions.push({
+                                symbol: position.symbol,
+                                quantity: position.quantity,
+                                value: parseFloat(value.toFixed(2)),
+                                pnl: parseFloat(pnl.toFixed(2))
+                            });
+                            
+                            totalValue += value;
+                            const baseAsset = position.symbol.replace('USDT', '');
+                            allocation[baseAsset] = parseFloat(((value / totalValue) * 100).toFixed(1));
+                        }
+                    }
+                    
+                    // Update cash allocation percentage
+                    allocation.Cash = parseFloat(((cash / totalValue) * 100).toFixed(1));
+                    
+                    portfolio = {
+                        totalValue: parseFloat(totalValue.toFixed(2)),
+                        cash: parseFloat(cash.toFixed(2)),
+                        positions: portfolioPositions,
+                        allocation,
+                        lastUpdate: new Date().toISOString()
+                    };
+                    
+                } catch (portfolioError) {
+                    console.warn('Could not get live portfolio data:', portfolioError);
+                    // Keep default portfolio data as fallback
+                }
+            }
             
             res.json(portfolio);
         } catch (error) {
+            console.error('Failed to get portfolio data:', error);
             res.status(500).json({ error: 'Failed to get portfolio data' });
         }
     }
