@@ -1,0 +1,17 @@
+{
+  "trade_1758402737267_qw9ur14857": {
+    "id": "trade_1758402737267_qw9ur14857",
+    "timestamp": 1758402737267,
+    "symbol": "BTCUSDT",
+    "side": "SELL",
+    "type": "MARKET",
+    "quantity": 0.001,
+    "price": 50000,
+    "executedPrice": 50000,
+    "orderId": "order_1758402733656_dz96fum04",
+    "status": "FILLED",
+    "confidence": null,
+    "riskScore": 45.5,
+    "strategy": "adaptive_strategy"
+  }
+}

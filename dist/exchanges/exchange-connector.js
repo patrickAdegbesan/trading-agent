@@ -1,0 +1,369 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ExchangeConnector = void 0;
+const binance_api_node_1 = __importDefault(require("binance-api-node"));
+const events_1 = require("events");
+const winston_1 = __importDefault(require("winston"));
+const reconnecting_websocket_1 = __importDefault(require("reconnecting-websocket"));
+const ws_1 = __importDefault(require("ws"));
+class ExchangeConnector extends events_1.EventEmitter {
+    constructor(apiKey, apiSecret, testnet = true) {
+        super();
+        this.wsConnections = new Map();
+        this.isConnected = false;
+        this.rateLimitCount = 0;
+        this.rateLimitReset = 0;
+        this.apiKey = apiKey;
+        this.apiSecret = apiSecret;
+        this.testnet = testnet;
+        this.logger = winston_1.default.createLogger({
+            level: 'info',
+            format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.json()),
+            transports: [
+                new winston_1.default.transports.Console(),
+                new winston_1.default.transports.File({ filename: 'logs/exchange.log' })
+            ]
+        });
+    }
+    async connect() {
+        try {
+            this.logger.info('Connecting to Binance API...', { testnet: this.testnet });
+            // FIXED: Initialize Binance client ONCE using the working diagnostic pattern
+            this.client = (0, binance_api_node_1.default)({
+                apiKey: this.apiKey,
+                apiSecret: this.apiSecret,
+                httpBase: this.testnet ? 'https://testnet.binance.vision' : undefined,
+                wsBase: this.testnet ? 'wss://stream.testnet.binance.vision' : undefined,
+            });
+            // Test connection with single call (no multiple reconnections)
+            const serverTime = await this.client.time();
+            const accountInfo = await this.client.accountInfo();
+            this.isConnected = true;
+            this.logger.info('Successfully connected to Binance', {
+                serverTime,
+                accountType: accountInfo.accountType,
+                canTrade: accountInfo.canTrade
+            });
+            this.emit('connected');
+        }
+        catch (error) {
+            this.logger.error('Failed to connect to Binance', { error: error.message });
+            this.emit('error', error);
+            throw error;
+        }
+    }
+    async disconnect() {
+        try {
+            this.logger.info('Disconnecting from Binance...');
+            // Close all WebSocket connections
+            for (const [symbol, ws] of this.wsConnections) {
+                ws.close();
+                this.logger.debug(`Closed WebSocket for ${symbol}`);
+            }
+            this.wsConnections.clear();
+            this.isConnected = false;
+            this.emit('disconnected');
+            this.logger.info('Disconnected from Binance');
+        }
+        catch (error) {
+            this.logger.error('Error during disconnect', { error: error.message });
+            throw error;
+        }
+    }
+    isConnectedToExchange() {
+        return this.isConnected;
+    }
+    // Market data methods
+    async getTickerPrice(symbol) {
+        try {
+            // Use the improved getTickerData method with retry logic
+            const tickerData = await this.getTickerData(symbol);
+            if (!tickerData) {
+                throw new Error(`No ticker data available for ${symbol}`);
+            }
+            return tickerData;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get ticker for ${symbol}`, { error: error.message });
+            throw error;
+        }
+    }
+    async getKlines(symbol, interval, limit = 500) {
+        try {
+            const klines = await this.client.candles({ symbol, interval, limit });
+            const mappedKlines = klines.map((k) => ({
+                symbol,
+                openTime: k.openTime,
+                closeTime: k.closeTime,
+                open: k.open,
+                high: k.high,
+                low: k.low,
+                close: k.close,
+                volume: k.volume,
+                trades: k.count
+            }));
+            return mappedKlines;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get klines for ${symbol}`, { error: error.message });
+            throw error;
+        }
+    }
+    // Data retrieval methods
+    async getTickerData(symbol) {
+        try {
+            this.checkRateLimit();
+            // Add retry logic for ticker data fetching
+            let lastError;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    // Use 24hr ticker stats which is more reliable on testnet
+                    const ticker = await this.client.dailyStats({ symbol });
+                    return {
+                        symbol: ticker.symbol,
+                        price: ticker.lastPrice,
+                        change: ticker.priceChange,
+                        changePercent: ticker.priceChangePercent,
+                        volume: ticker.volume,
+                        quoteVolume: ticker.quoteVolume
+                    };
+                }
+                catch (error) {
+                    lastError = error;
+                    this.logger.warn(`Attempt ${attempt} failed for ticker data ${symbol}`, {
+                        error: error.message
+                    });
+                    // Wait before retry (exponential backoff)
+                    if (attempt < 3) {
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                    }
+                }
+            }
+            // If all retries failed, try alternative method
+            try {
+                const price = await this.client.prices({ symbol });
+                if (price && price[symbol]) {
+                    this.logger.info(`Fallback to price-only data for ${symbol}`);
+                    return {
+                        symbol,
+                        price: price[symbol],
+                        change: '0',
+                        changePercent: '0',
+                        volume: '0',
+                        quoteVolume: '0'
+                    };
+                }
+            }
+            catch (fallbackError) {
+                this.logger.warn(`Fallback price fetch also failed for ${symbol}`, {
+                    error: fallbackError.message
+                });
+            }
+            throw lastError;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get ticker data for ${symbol}`, { error: error.message });
+            return null;
+        }
+    }
+    // Trading methods
+    async placeOrder(orderData) {
+        try {
+            this.checkRateLimit();
+            const order = await this.client.order(orderData);
+            this.logger.info('Order placed successfully', {
+                orderId: order.orderId,
+                symbol: orderData.symbol,
+                side: orderData.side,
+                type: orderData.type,
+                quantity: orderData.quantity
+            });
+            this.emit('orderPlaced', order);
+            return order;
+        }
+        catch (error) {
+            this.logger.error('Failed to place order', {
+                error: error.message,
+                orderData
+            });
+            this.emit('orderError', { error, orderData });
+            throw error;
+        }
+    }
+    async placeOCOOrder(symbol, side, quantity, price, stopPrice, stopLimitPrice) {
+        try {
+            this.checkRateLimit();
+            const order = await this.client.orderOco({
+                symbol,
+                side,
+                quantity,
+                price,
+                stopPrice,
+                stopLimitPrice,
+                stopLimitTimeInForce: 'GTC'
+            });
+            this.logger.info('OCO Order placed successfully', {
+                orderListId: order.orderListId,
+                symbol,
+                side,
+                quantity
+            });
+            this.emit('ocoOrderPlaced', order);
+            return order;
+        }
+        catch (error) {
+            this.logger.error('Failed to place OCO order', { error: error.message });
+            throw error;
+        }
+    }
+    async cancelOrder(symbol, orderId) {
+        try {
+            const result = await this.client.cancelOrder({ symbol, orderId });
+            this.logger.info('Order cancelled', { symbol, orderId });
+            return result;
+        }
+        catch (error) {
+            this.logger.error('Failed to cancel order', {
+                error: error.message,
+                symbol,
+                orderId
+            });
+            throw error;
+        }
+    }
+    async getOpenOrders(symbol) {
+        try {
+            const orders = await this.client.openOrders(symbol ? { symbol } : {});
+            return orders;
+        }
+        catch (error) {
+            this.logger.error('Failed to get open orders', { error: error.message });
+            throw error;
+        }
+    }
+    async getAccountInfo() {
+        try {
+            const account = await this.client.accountInfo();
+            return account;
+        }
+        catch (error) {
+            this.logger.error('Failed to get account info', { error: error.message });
+            throw error;
+        }
+    }
+    // WebSocket methods for real-time data - SAFELY RE-ENABLED
+    subscribeToTicker(symbol) {
+        const streamName = `${symbol.toLowerCase()}@ticker`;
+        this.subscribeToStream(streamName, (data) => {
+            const tickerData = {
+                symbol: data.s,
+                price: data.c,
+                change: data.P,
+                changePercent: data.p,
+                volume: data.v,
+                quoteVolume: data.q
+            };
+            this.emit('ticker', tickerData);
+        });
+    }
+    subscribeToKlines(symbol, interval) {
+        const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
+        this.subscribeToStream(streamName, (data) => {
+            const kline = data.k;
+            const klineData = {
+                symbol: kline.s,
+                openTime: kline.t,
+                closeTime: kline.T,
+                open: kline.o,
+                high: kline.h,
+                low: kline.l,
+                close: kline.c,
+                volume: kline.v,
+                trades: kline.n
+            };
+            this.emit('kline', klineData);
+        });
+    }
+    subscribeToStream(streamName, callback) {
+        if (this.wsConnections.has(streamName)) {
+            this.logger.warn(`Already subscribed to ${streamName}`);
+            return;
+        }
+        // Use correct testnet WebSocket endpoints (updated 2025 format)
+        const wsUrl = this.testnet
+            ? `wss://stream.testnet.binance.vision/ws/${streamName}` // Correct testnet format
+            : `wss://stream.binance.com/ws/${streamName}`; // Production format
+        const ws = new reconnecting_websocket_1.default(wsUrl, [], {
+            WebSocket: ws_1.default,
+            connectionTimeout: 10000, // Increased timeout
+            maxRetries: 5, // Reduced retries to avoid spam
+            maxReconnectionDelay: 30000,
+            minReconnectionDelay: 2000,
+        });
+        // Add error handler to prevent unhandled events
+        ws.onerror = (error) => {
+            this.logger.warn(`WebSocket error for ${streamName} (handled gracefully)`, {
+                error: error?.message || 'Connection error'
+            });
+            // Don't re-emit to prevent unhandled error events
+        };
+        ws.onopen = () => {
+            this.logger.info(`WebSocket connected: ${streamName}`);
+            // No subscription message needed for individual stream endpoints
+        };
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data.toString());
+                callback(data);
+            }
+            catch (error) {
+                this.logger.error(`Failed to parse WebSocket message for ${streamName}`, {
+                    error: error.message
+                });
+            }
+        };
+        ws.onclose = (event) => {
+            this.logger.info(`WebSocket closed: ${streamName} (code: ${event?.code || 'unknown'})`);
+        };
+        // Additional error prevention for the underlying WebSocket
+        ws.addEventListener('error', (error) => {
+            // Silently handle to prevent crashes
+            this.logger.debug(`WebSocket addEventListener error for ${streamName}`, {
+                error: error?.message || 'Unknown error'
+            });
+        });
+        this.wsConnections.set(streamName, ws);
+    }
+    checkRateLimit() {
+        const now = Date.now();
+        // Reset rate limit counter if needed (Binance resets every minute)
+        if (now > this.rateLimitReset) {
+            this.rateLimitCount = 0;
+            this.rateLimitReset = now + 60000; // Reset in 1 minute
+        }
+        // Binance allows 1200 requests per minute for spot trading
+        if (this.rateLimitCount >= 1100) { // Leave some buffer
+            const waitTime = this.rateLimitReset - now;
+            this.logger.warn(`Rate limit approaching, waiting ${waitTime}ms`);
+            throw new Error(`Rate limit exceeded, wait ${waitTime}ms`);
+        }
+        this.rateLimitCount++;
+    }
+    // Health check method
+    async healthCheck() {
+        const start = Date.now();
+        try {
+            await this.client.ping();
+            const latency = Date.now() - start;
+            return { status: 'healthy', latency };
+        }
+        catch (error) {
+            return { status: 'unhealthy', latency: Date.now() - start };
+        }
+    }
+}
+exports.ExchangeConnector = ExchangeConnector;
+//# sourceMappingURL=exchange-connector.js.map

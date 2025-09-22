@@ -1,0 +1,460 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DataCollector = void 0;
+const events_1 = require("events");
+const indicators_1 = require("./indicators");
+const settings_1 = require("../config/settings");
+const winston_1 = __importDefault(require("winston"));
+class DataCollector extends events_1.EventEmitter {
+    constructor(exchangeConnector, symbols = settings_1.settings.trading.pairs) {
+        super();
+        this.dataBuffers = new Map();
+        this.currentPrices = new Map();
+        this.isCollecting = false;
+        this.intervals = ['1m', '5m', '15m'];
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 10;
+        this.reconnectDelay = 1000; // Start with 1 second
+        this.dataValidationErrors = 0;
+        this.maxValidationErrors = 100;
+        this.exchangeConnector = exchangeConnector;
+        this.indicators = new indicators_1.TechnicalIndicators();
+        this.symbols = symbols;
+        this.logger = winston_1.default.createLogger({
+            level: 'info',
+            format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.json()),
+            transports: [
+                new winston_1.default.transports.Console(),
+                new winston_1.default.transports.File({ filename: 'logs/data-collector.log' })
+            ]
+        });
+        // Initialize data buffers
+        this.initializeBuffers();
+        this.setupEventHandlers();
+    }
+    initializeBuffers() {
+        for (const symbol of this.symbols) {
+            this.dataBuffers.set(symbol, {
+                symbol,
+                data: [],
+                maxSize: 1000, // Keep last 1000 data points
+                lastUpdate: 0
+            });
+        }
+    }
+    setupEventHandlers() {
+        // Exchange connection events
+        this.exchangeConnector.on('connected', () => {
+            this.logger.info('Exchange connector connected');
+            this.reconnectAttempts = 0;
+            this.reconnectDelay = 1000;
+        });
+        this.exchangeConnector.on('disconnected', () => {
+            this.logger.warn('Exchange connector disconnected');
+            if (this.isCollecting) {
+                this.handleReconnection();
+            }
+        });
+        this.exchangeConnector.on('error', (error) => {
+            this.logger.error('Exchange connector error', { error });
+            this.emit('error', error);
+        });
+        // Market data events
+        this.exchangeConnector.on('kline', (klineData) => {
+            this.processKlineData(klineData);
+        });
+        this.exchangeConnector.on('ticker', (tickerData) => {
+            this.processTickerData(tickerData);
+        });
+        // WebSocket specific events
+        this.exchangeConnector.on('wsError', ({ streamName, error }) => {
+            this.logger.error(`WebSocket error for ${streamName}`, { error });
+            this.handleReconnection();
+        });
+    }
+    /**
+     * Start collecting market data for all configured symbols
+     */
+    async startCollection() {
+        if (this.isCollecting) {
+            this.logger.warn('Data collection already started');
+            return;
+        }
+        try {
+            this.logger.info('Starting market data collection', {
+                symbols: this.symbols,
+                intervals: this.intervals
+            });
+            // FIXED: Don't reconnect if already connected - prevents connection storm
+            if (!this.exchangeConnector.isConnectedToExchange()) {
+                this.logger.warn('Exchange not connected - cannot start data collection');
+                throw new Error('Exchange must be connected before starting data collection');
+            }
+            // Load initial historical data
+            await this.loadInitialData();
+            // Subscribe to real-time data streams - SAFELY RE-ENABLED
+            this.subscribeToRealTimeData();
+            // Start health check
+            this.startHealthCheck();
+            this.isCollecting = true;
+            this.emit('collectionStarted');
+        }
+        catch (error) {
+            this.logger.error('Failed to start data collection', { error });
+            this.emit('error', error);
+            throw error;
+        }
+    }
+    /**
+     * Stop collecting market data
+     */
+    async stopCollection() {
+        if (!this.isCollecting) {
+            return;
+        }
+        this.logger.info('Stopping market data collection');
+        this.isCollecting = false;
+        // Stop health check
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+            this.healthCheckInterval = undefined;
+        }
+        // Disconnect from exchange
+        await this.exchangeConnector.disconnect();
+        this.emit('collectionStopped');
+    }
+    async loadInitialData() {
+        this.logger.info('Loading initial historical data');
+        const promises = this.symbols.map(async (symbol) => {
+            try {
+                // Get last 500 candles for primary interval (1m)
+                const klines = await this.exchangeConnector.getKlines(symbol, '1m', 500);
+                for (const kline of klines) {
+                    const candleData = {
+                        open: parseFloat(kline.open),
+                        high: parseFloat(kline.high),
+                        low: parseFloat(kline.low),
+                        close: parseFloat(kline.close),
+                        volume: parseFloat(kline.volume),
+                        timestamp: kline.openTime
+                    };
+                    // Add to indicators for feature calculation
+                    const features = this.indicators.addCandle(symbol, candleData);
+                    // Add to buffer
+                    const dataPoint = {
+                        symbol,
+                        timestamp: kline.openTime,
+                        open: candleData.open,
+                        high: candleData.high,
+                        low: candleData.low,
+                        close: candleData.close,
+                        volume: candleData.volume,
+                        features
+                    };
+                    this.addToBuffer(symbol, dataPoint);
+                    this.currentPrices.set(symbol, candleData.close);
+                }
+                this.logger.debug(`Loaded ${klines.length} historical candles for ${symbol}`);
+            }
+            catch (error) {
+                this.logger.error(`Failed to load historical data for ${symbol}`, { error });
+            }
+        });
+        await Promise.allSettled(promises);
+        this.logger.info('Historical data loading completed');
+    }
+    subscribeToRealTimeData() {
+        this.logger.info('Starting real-time data subscriptions');
+        for (const symbol of this.symbols) {
+            // Subscribe to 1-minute klines for primary data
+            this.exchangeConnector.subscribeToKlines(symbol, '1m');
+            // Subscribe to ticker for real-time price updates
+            this.exchangeConnector.subscribeToTicker(symbol);
+            this.logger.debug(`Subscribed to real-time data for ${symbol}`);
+        }
+        // Start fallback polling in case WebSocket connections fail
+        this.startFallbackPolling();
+    }
+    startFallbackPolling() {
+        // Poll for price updates every 10 seconds as fallback
+        setInterval(async () => {
+            try {
+                for (const symbol of this.symbols) {
+                    const ticker = await this.exchangeConnector.getTickerData(symbol);
+                    if (ticker) {
+                        this.currentPrices.set(symbol, parseFloat(ticker.price));
+                        this.logger.debug(`Fallback price update for ${symbol}: ${ticker.price}`);
+                    }
+                }
+            }
+            catch (error) {
+                this.logger.warn('Fallback polling error', { error });
+            }
+        }, 10000);
+    }
+    processKlineData(klineData) {
+        try {
+            // Validate incoming data
+            if (!this.validateKlineData(klineData)) {
+                this.dataValidationErrors++;
+                if (this.dataValidationErrors > this.maxValidationErrors) {
+                    this.logger.error('Too many validation errors, stopping collection');
+                    this.stopCollection();
+                    return;
+                }
+                return;
+            }
+            const candleData = {
+                open: parseFloat(klineData.open),
+                high: parseFloat(klineData.high),
+                low: parseFloat(klineData.low),
+                close: parseFloat(klineData.close),
+                volume: parseFloat(klineData.volume),
+                timestamp: klineData.openTime
+            };
+            // Calculate technical indicators and features
+            const features = this.indicators.addCandle(klineData.symbol, candleData);
+            const dataPoint = {
+                symbol: klineData.symbol,
+                timestamp: klineData.openTime,
+                open: candleData.open,
+                high: candleData.high,
+                low: candleData.low,
+                close: candleData.close,
+                volume: candleData.volume,
+                features
+            };
+            // Update current price
+            this.currentPrices.set(klineData.symbol, candleData.close);
+            // Add to buffer
+            this.addToBuffer(klineData.symbol, dataPoint);
+            // Emit new data event
+            this.emit('newCandle', {
+                symbol: klineData.symbol,
+                data: dataPoint,
+                features
+            });
+        }
+        catch (error) {
+            this.logger.error('Error processing kline data', {
+                error,
+                symbol: klineData.symbol
+            });
+        }
+    }
+    processTickerData(tickerData) {
+        try {
+            const price = parseFloat(tickerData.price);
+            if (isNaN(price) || price <= 0) {
+                return;
+            }
+            this.currentPrices.set(tickerData.symbol, price);
+            this.emit('priceUpdate', {
+                symbol: tickerData.symbol,
+                price,
+                change: parseFloat(tickerData.change),
+                changePercent: parseFloat(tickerData.changePercent),
+                volume: parseFloat(tickerData.volume)
+            });
+        }
+        catch (error) {
+            this.logger.error('Error processing ticker data', {
+                error,
+                symbol: tickerData.symbol
+            });
+        }
+    }
+    addToBuffer(symbol, dataPoint) {
+        const buffer = this.dataBuffers.get(symbol);
+        if (!buffer)
+            return;
+        buffer.data.push(dataPoint);
+        buffer.lastUpdate = Date.now();
+        // Keep buffer size manageable
+        if (buffer.data.length > buffer.maxSize) {
+            buffer.data.shift(); // Remove oldest data point
+        }
+    }
+    validateKlineData(kline) {
+        if (!kline.symbol || !kline.open || !kline.high || !kline.low || !kline.close) {
+            this.logger.warn('Invalid kline data: missing required fields', { kline });
+            return false;
+        }
+        const open = parseFloat(kline.open);
+        const high = parseFloat(kline.high);
+        const low = parseFloat(kline.low);
+        const close = parseFloat(kline.close);
+        const volume = parseFloat(kline.volume);
+        // Basic price validation
+        if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close) || isNaN(volume)) {
+            this.logger.warn('Invalid kline data: non-numeric values', { kline });
+            return false;
+        }
+        if (open <= 0 || high <= 0 || low <= 0 || close <= 0 || volume < 0) {
+            this.logger.warn('Invalid kline data: invalid price/volume values', { kline });
+            return false;
+        }
+        if (high < Math.max(open, close) || low > Math.min(open, close)) {
+            this.logger.warn('Invalid kline data: inconsistent OHLC values', { kline });
+            return false;
+        }
+        // Check for extreme price movements (potential data errors)
+        const priceChange = Math.abs((close - open) / open);
+        if (priceChange > 0.5) { // 50% price change in one candle - likely error
+            this.logger.warn('Suspicious price movement detected', {
+                symbol: kline.symbol,
+                change: priceChange * 100 + '%'
+            });
+            return false;
+        }
+        return true;
+    }
+    async handleReconnection() {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            this.logger.error('Max reconnection attempts reached, stopping collection');
+            await this.stopCollection();
+            return;
+        }
+        this.reconnectAttempts++;
+        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
+        this.logger.info(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
+        setTimeout(async () => {
+            try {
+                // Only restart real-time subscriptions, don't reconnect the main client
+                this.subscribeToRealTimeData();
+                this.reconnectAttempts = 0; // Reset on successful reconnection
+            }
+            catch (error) {
+                this.logger.error('Reconnection failed', { error });
+                this.handleReconnection(); // Try again
+            }
+        }, delay);
+    }
+    startHealthCheck() {
+        this.healthCheckInterval = setInterval(() => {
+            this.performHealthCheck();
+        }, 60000); // Check every minute
+    }
+    async performHealthCheck() {
+        try {
+            // Check if we're still receiving data
+            const now = Date.now();
+            const staleThreshold = 120000; // 2 minutes
+            const reconnectThreshold = 300000; // 5 minutes - trigger reconnection
+            let shouldReconnect = false;
+            for (const [symbol, buffer] of this.dataBuffers) {
+                const timeSinceUpdate = now - buffer.lastUpdate;
+                if (timeSinceUpdate > staleThreshold) {
+                    this.logger.warn(`No data received for ${symbol} in ${(timeSinceUpdate / 1000).toFixed(0)}s`);
+                    // If data is really stale, trigger reconnection
+                    if (timeSinceUpdate > reconnectThreshold) {
+                        this.logger.error(`Data feed for ${symbol} is critically stale (${(timeSinceUpdate / 1000).toFixed(0)}s). Triggering reconnection.`);
+                        shouldReconnect = true;
+                    }
+                }
+            }
+            // Check exchange connectivity
+            const healthStatus = await this.exchangeConnector.healthCheck();
+            if (healthStatus.status !== 'healthy') {
+                this.logger.warn('Exchange health check failed', { healthStatus });
+                shouldReconnect = true;
+            }
+            // Trigger reconnection if needed
+            if (shouldReconnect && this.isCollecting) {
+                this.logger.info('Attempting automatic reconnection due to health check failure...');
+                await this.handleReconnection();
+            }
+        }
+        catch (error) {
+            this.logger.error('Health check failed', { error });
+            // On health check failure, also try to reconnect
+            if (this.isCollecting) {
+                await this.handleReconnection();
+            }
+        }
+    }
+    // Public API methods
+    /**
+     * Get latest market data for a symbol
+     */
+    getLatestData(symbol) {
+        const buffer = this.dataBuffers.get(symbol);
+        return buffer && buffer.data.length > 0 ? buffer.data[buffer.data.length - 1] : undefined;
+    }
+    /**
+     * Get historical data for a symbol
+     */
+    getHistoricalData(symbol, count) {
+        const buffer = this.dataBuffers.get(symbol);
+        if (!buffer)
+            return [];
+        return count ? buffer.data.slice(-count) : [...buffer.data];
+    }
+    /**
+     * Get current market snapshot for all symbols
+     */
+    getMarketSnapshot() {
+        const symbols = new Map();
+        const features = new Map();
+        for (const [symbol, buffer] of this.dataBuffers) {
+            if (buffer.data.length > 0) {
+                const latest = buffer.data[buffer.data.length - 1];
+                symbols.set(symbol, latest);
+                if (latest.features) {
+                    features.set(symbol, latest.features);
+                }
+            }
+        }
+        return {
+            timestamp: Date.now(),
+            symbols,
+            features
+        };
+    }
+    /**
+     * Get current price for a symbol
+     */
+    getCurrentPrice(symbol) {
+        return this.currentPrices.get(symbol);
+    }
+    /**
+     * Get current prices for all symbols
+     */
+    getAllCurrentPrices() {
+        return new Map(this.currentPrices);
+    }
+    /**
+     * Check if data collection is active
+     */
+    isCollectingData() {
+        return this.isCollecting;
+    }
+    /**
+     * Get buffer statistics
+     */
+    getBufferStats() {
+        const stats = new Map();
+        for (const [symbol, buffer] of this.dataBuffers) {
+            stats.set(symbol, {
+                size: buffer.data.length,
+                lastUpdate: buffer.lastUpdate
+            });
+        }
+        return stats;
+    }
+    /**
+     * Clear all data buffers
+     */
+    clearBuffers() {
+        for (const buffer of this.dataBuffers.values()) {
+            buffer.data = [];
+            buffer.lastUpdate = 0;
+        }
+        this.indicators = new indicators_1.TechnicalIndicators();
+    }
+}
+exports.DataCollector = DataCollector;
+//# sourceMappingURL=data-collector.js.map

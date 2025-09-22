@@ -1,0 +1,1 @@
+{"version":3,"file":"price-analyzer.d.ts","sourceRoot":"","sources":["../../src/market-data/price-analyzer.ts"],"names":[],"mappings":"AAAA,qBAAa,aAAa;IACV,OAAO,CAAC,SAAS;gBAAT,SAAS,EAAE,MAAM,EAAE;IAEvC,mBAAmB;IAInB,YAAY;CAGf"}
