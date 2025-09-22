@@ -448,7 +448,14 @@ export class TradingDashboard {
         const port = settings.monitoring.port;
         
         this.server = this.app.listen(port, () => {
-            console.log(`🌐 Trading Dashboard available at: http://localhost:${port}`);
+            // Show correct URL based on environment
+            if (process.env.NODE_ENV === 'production' && process.env.HEROKU_APP_NAME) {
+                console.log(`🌐 Trading Dashboard available at: https://${process.env.HEROKU_APP_NAME}.herokuapp.com/`);
+            } else if (process.env.NODE_ENV === 'production') {
+                console.log(`🌐 Trading Dashboard available at: https://crypto-trading-bot-eu-5203693af432.herokuapp.com/`);
+            } else {
+                console.log(`🌐 Trading Dashboard available at: http://localhost:${port}`);
+            }
             console.log(`📊 Real-time monitoring and analytics ready!`);
         });
     }

@@ -322,7 +322,16 @@ class DashboardServer {
         return new Promise((resolve) => {
             this.app.listen(port, () => {
                 console.log(`📊 Dashboard server running on port ${port}`);
-                console.log(`🌐 Dashboard URL: http://localhost:${port}`);
+                // Show correct URL based on environment
+                if (process.env.NODE_ENV === 'production' && process.env.HEROKU_APP_NAME) {
+                    console.log(`🌐 Dashboard URL: https://${process.env.HEROKU_APP_NAME}.herokuapp.com/`);
+                }
+                else if (process.env.NODE_ENV === 'production') {
+                    console.log(`🌐 Dashboard URL: https://crypto-trading-bot-eu-5203693af432.herokuapp.com/`);
+                }
+                else {
+                    console.log(`🌐 Dashboard URL: http://localhost:${port}`);
+                }
                 resolve();
             });
         });
