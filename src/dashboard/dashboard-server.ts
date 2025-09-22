@@ -252,17 +252,24 @@ export class DashboardServer {
             const performance = await this.databaseService.getPerformance();
             const days = parseInt(req.query.days as string) || 30;
             
-            // Get performance data for the last N days
+            // Get performance data for the last N days - but filter out clearly stale data first
+            const now = Date.now();
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
             
+            // Filter out old stale data (anything from before today - 1 day to be safe)
+            const oneDayAgo = now - (24 * 60 * 60 * 1000);
+            
             let recentPerformance = performance
-                .filter((p: any) => new Date(p.timestamp) >= cutoffDate)
+                .filter((p: any) => {
+                    const timestamp = typeof p.timestamp === 'number' ? p.timestamp : Date.parse(p.timestamp);
+                    // Include only data from the last 24 hours to avoid stale test data
+                    return timestamp >= oneDayAgo && timestamp <= now;
+                })
                 .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             
             // If no recent performance data, create baseline starting data for chart
             if (recentPerformance.length === 0) {
-                const now = Date.now();
                 const startTime = now - (days * 24 * 60 * 60 * 1000); // N days ago
                 
                 // Create baseline data points (starting portfolio value)
