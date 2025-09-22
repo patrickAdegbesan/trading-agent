@@ -265,7 +265,7 @@ export class DashboardServer {
                     for (const [symbol, data] of marketSnapshot.symbols) {
                         if (data.close && data.volume) {
                             // Calculate 24h change from available data
-                            const change24h = data.features?.priceChange24h || 
+                            const change24h = data.features?.price_change_24h || 
                                             ((data.close - (data.open || data.close)) / (data.open || data.close) * 100);
                             
                             liveData.prices[symbol] = {
@@ -310,33 +310,31 @@ export class DashboardServer {
             if (this.portfolioManager) {
                 try {
                     // Get real portfolio data
-                    const balances = await this.portfolioManager.getBalances();
-                    const positions = await this.portfolioManager.getPositions();
+                    const cash = this.portfolioManager.getBalance();
+                    const portfolioData = await this.portfolioManager.getPortfolio();
                     
                     // Calculate total value
-                    let totalValue = 0;
-                    let cash = balances.USDT || 0;
-                    totalValue += cash;
+                    let totalValue = portfolioData.totalValue || cash;
                     
                     // Process positions
                     const portfolioPositions = [];
                     const allocation: any = { Cash: cash };
                     
-                    for (const position of positions) {
-                        if (position.quantity > 0) {
-                            const currentPrice = this.dataCollector?.getLastPrice(position.symbol) || 0;
-                            const value = position.quantity * currentPrice;
-                            const pnl = value - (position.averagePrice * position.quantity);
+                    for (const [symbol, quantity] of Object.entries(portfolioData.positions)) {
+                        if (quantity > 0) {
+                            const currentPrice = this.dataCollector?.getCurrentPrice(symbol) || 0;
+                            const value = quantity * currentPrice;
+                            // For PnL calculation, we'd need entry price from position data
+                            const pnl = 0; // TODO: Get actual PnL from position tracking
                             
                             portfolioPositions.push({
-                                symbol: position.symbol,
-                                quantity: position.quantity,
+                                symbol: symbol,
+                                quantity: quantity,
                                 value: parseFloat(value.toFixed(2)),
                                 pnl: parseFloat(pnl.toFixed(2))
                             });
                             
-                            totalValue += value;
-                            const baseAsset = position.symbol.replace('USDT', '');
+                            const baseAsset = symbol.replace('USDT', '');
                             allocation[baseAsset] = parseFloat(((value / totalValue) * 100).toFixed(1));
                         }
                     }
