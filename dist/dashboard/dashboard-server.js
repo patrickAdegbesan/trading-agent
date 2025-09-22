@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DashboardServer = void 0;
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
+const database_service_1 = require("../database/database-service");
 class DashboardServer {
     constructor(databaseService) {
         this.currentStats = {};
@@ -331,4 +332,12 @@ class DashboardServer {
     }
 }
 exports.DashboardServer = DashboardServer;
+// Start the server if this file is run directly
+if (require.main === module) {
+    const port = process.env.PORT || 3000;
+    // Initialize database service
+    const dbService = new database_service_1.DatabaseService();
+    const dashboard = new DashboardServer(dbService);
+    dashboard.start(Number(port)).catch(console.error);
+}
 //# sourceMappingURL=dashboard-server.js.map

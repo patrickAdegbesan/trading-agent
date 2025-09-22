@@ -110,4 +110,3 @@ export declare class Database extends EventEmitter {
     private persistMarketData;
     close(): Promise<void>;
 }
-//# sourceMappingURL=database.d.ts.map

@@ -50,4 +50,3 @@ export declare class TradingAgent extends EventEmitter {
      */
     stop(): Promise<void>;
 }
-//# sourceMappingURL=trading-agent.d.ts.map

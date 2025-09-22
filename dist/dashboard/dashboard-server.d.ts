@@ -38,4 +38,3 @@ export declare class DashboardServer {
     start(port?: number): Promise<void>;
     getApp(): express.Application;
 }
-//# sourceMappingURL=dashboard-server.d.ts.map

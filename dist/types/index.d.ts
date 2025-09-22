@@ -81,4 +81,3 @@ export interface Position {
     unrealizedPnL: number;
     timestamp: number;
 }
-//# sourceMappingURL=index.d.ts.map

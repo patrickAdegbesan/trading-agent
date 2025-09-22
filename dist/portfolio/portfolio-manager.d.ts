@@ -45,4 +45,3 @@ export declare class PortfolioManager extends EventEmitter {
      */
     private getPrice;
 }
-//# sourceMappingURL=portfolio-manager.d.ts.map

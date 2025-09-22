@@ -104,4 +104,3 @@ export declare class RiskManager extends EventEmitter {
     private checkAndResetDaily;
     private getStartOfDay;
 }
-//# sourceMappingURL=risk-manager.d.ts.map

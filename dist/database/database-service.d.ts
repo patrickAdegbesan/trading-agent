@@ -50,4 +50,3 @@ export declare class DatabaseService extends EventEmitter {
         lastPerformanceUpdate: number | undefined;
     };
 }
-//# sourceMappingURL=database-service.d.ts.map

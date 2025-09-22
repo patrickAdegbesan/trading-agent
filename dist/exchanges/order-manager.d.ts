@@ -111,4 +111,3 @@ export declare class OrderManager extends EventEmitter {
         successRate: number;
     };
 }
-//# sourceMappingURL=order-manager.d.ts.map

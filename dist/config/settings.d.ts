@@ -52,4 +52,3 @@ export interface TradingConfig {
     };
 }
 export declare const settings: TradingConfig;
-//# sourceMappingURL=settings.d.ts.map

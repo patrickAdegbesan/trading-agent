@@ -98,4 +98,3 @@ export declare function calculateMACD(data: number[], shortPeriod: number, longP
     signal: number[];
     histogram: number[];
 };
-//# sourceMappingURL=indicators.d.ts.map

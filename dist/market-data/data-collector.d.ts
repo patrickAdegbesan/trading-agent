@@ -96,4 +96,3 @@ export declare class DataCollector extends EventEmitter {
      */
     clearBuffers(): void;
 }
-//# sourceMappingURL=data-collector.d.ts.map

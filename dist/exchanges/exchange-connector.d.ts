@@ -67,4 +67,3 @@ export declare class ExchangeConnector extends EventEmitter {
         latency: number;
     }>;
 }
-//# sourceMappingURL=exchange-connector.d.ts.map

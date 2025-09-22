@@ -373,3 +373,13 @@ export class DashboardServer {
         return this.app;
     }
 }
+
+// Start the server if this file is run directly
+if (require.main === module) {
+    const port = process.env.PORT || 3000;
+    
+    // Initialize database service
+    const dbService = new DatabaseService();
+    const dashboard = new DashboardServer(dbService);
+    dashboard.start(Number(port)).catch(console.error);
+}
