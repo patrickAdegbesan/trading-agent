@@ -46,6 +46,7 @@
     "reconnecting-websocket": "^4.4.0",
     "redis": "^5.8.2",
     "technicalindicators": "^3.1.0",
+    "typescript": "^5.2.2",
     "uuid": "^9.0.0",
     "winston": "^3.10.0",
     "ws": "^8.18.0"
@@ -70,8 +71,7 @@
     "nodemon": "^3.0.1",
     "prettier": "^3.0.3",
     "ts-jest": "^29.4.4",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.2.2"
+    "ts-node": "^10.9.1"
   },
   "keywords": [
     "crypto",
