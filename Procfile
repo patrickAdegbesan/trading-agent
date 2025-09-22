@@ -1,1 +1,1 @@
-worker: npm run start:paper-trading
+worker: npm start
