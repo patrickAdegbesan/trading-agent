@@ -320,11 +320,12 @@ class RiskManager extends events_1.EventEmitter {
             };
         }
         // Check confidence threshold
-        if (signal.confidence < 0.6) {
+        const minConfidence = parseFloat(process.env.MIN_CONFIDENCE || '45') / 100; // Use env var, default 45%
+        if (signal.confidence < minConfidence) {
             return {
                 approved: false,
                 positionSize: 0,
-                reason: 'Signal confidence too low',
+                reason: `Signal confidence too low: ${(signal.confidence * 100).toFixed(1)}% < ${(minConfidence * 100).toFixed(1)}%`,
                 riskScore: 70
             };
         }

@@ -59,7 +59,7 @@ class TradingAgent extends events_1.EventEmitter {
         /**
          * Execute a trade based on ML prediction signal
          */
-        this.MIN_CONFIDENCE = 0.45; // More aggressive - trade at 45% confidence
+        this.MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE || '45') / 100; // Use env var, default 45%
         this.predictionEngine = predictionEngine;
         this.portfolioManager = portfolioManager;
         this.orderManager = orderManager;

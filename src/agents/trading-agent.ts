@@ -96,7 +96,7 @@ export class TradingAgent extends EventEmitter {
     /**
      * Execute a trade based on ML prediction signal
      */
-    private readonly MIN_CONFIDENCE = 0.45; // More aggressive - trade at 45% confidence
+    private readonly MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE || '45') / 100; // Use env var, default 45%
 
     async executeTrade(signal: TradingSignal): Promise<TradeResult> {
         try {

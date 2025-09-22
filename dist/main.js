@@ -171,7 +171,8 @@ async function main() {
                         if (ENABLE_LIVE_TRADING) {
                             // LIVE TRADING: Execute trades with ML predictions
                             const mlSignal = predictionEngine.generateSignal(predictionInput);
-                            if (mlSignal && mlSignal.confidence > 0.6) {
+                            const minConfidence = parseFloat(process.env.MIN_CONFIDENCE || '45') / 100;
+                            if (mlSignal && mlSignal.confidence > minConfidence) {
                                 console.log(`🧠 Enhanced ML Signal for ${symbol}:`, {
                                     side: mlSignal.side,
                                     confidence: (mlSignal.confidence * 100).toFixed(1) + '%',
