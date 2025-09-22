@@ -34,6 +34,10 @@ class RedisService extends events_1.EventEmitter {
             connectTimeout: 10000,
             enableReadyCheck: true,
             enableOfflineQueue: false,
+            // Configure TLS for Heroku Redis SSL connections
+            tls: redisUrl.startsWith('rediss://') ? {
+                rejectUnauthorized: false // Accept self-signed certificates from Heroku
+            } : undefined,
             // Allow reconnection for Heroku Redis
             reconnectOnError: (err) => {
                 const targetError = 'READONLY';
