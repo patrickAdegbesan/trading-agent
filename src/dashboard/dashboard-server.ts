@@ -256,9 +256,47 @@ export class DashboardServer {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
             
-            const recentPerformance = performance
+            let recentPerformance = performance
                 .filter((p: any) => new Date(p.timestamp) >= cutoffDate)
                 .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            
+            // If no recent performance data, create baseline starting data for chart
+            if (recentPerformance.length === 0) {
+                const now = Date.now();
+                const startTime = now - (days * 24 * 60 * 60 * 1000); // N days ago
+                
+                // Create baseline data points (starting portfolio value)
+                recentPerformance = [
+                    {
+                        timestamp: startTime,
+                        totalTrades: 0,
+                        winningTrades: 0,
+                        losingTrades: 0,
+                        winRate: 0,
+                        totalPnL: 0,
+                        maxDrawdown: 0,
+                        maxDrawdownPercent: 0,
+                        sharpeRatio: 0,
+                        averageWin: 0,
+                        averageLoss: 0,
+                        profitFactor: 0
+                    },
+                    {
+                        timestamp: now,
+                        totalTrades: 0,
+                        winningTrades: 0,
+                        losingTrades: 0,
+                        winRate: 0,
+                        totalPnL: 0,
+                        maxDrawdown: 0,
+                        maxDrawdownPercent: 0,
+                        sharpeRatio: 0,
+                        averageWin: 0,
+                        averageLoss: 0,
+                        profitFactor: 0
+                    }
+                ];
+            }
             
             const chartData = this.formatPerformanceChartData(recentPerformance);
             
@@ -487,12 +525,12 @@ export class DashboardServer {
     private formatPerformanceChartData(performance: any[]): any[] {
         let cumulativePnL = 0;
         return performance.map((p: any) => {
-            cumulativePnL += p.realized_pnl || 0;
+            cumulativePnL += p.totalPnL || 0;
             return {
                 timestamp: p.timestamp,
-                pnl: p.realized_pnl || 0,
+                pnl: p.totalPnL || 0,
                 cumulativePnL,
-                winRate: p.win_rate || 0
+                winRate: p.winRate || 0
             };
         });
     }
@@ -503,7 +541,7 @@ export class DashboardServer {
         let cumulativePnL = 0;
         
         for (const p of performance) {
-            cumulativePnL += p.realized_pnl || 0;
+            cumulativePnL += p.totalPnL || 0;
             if (cumulativePnL > peak) {
                 peak = cumulativePnL;
             }
