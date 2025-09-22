@@ -21,6 +21,7 @@ import { RiskManager } from './portfolio/risk-manager';
 import { DatabaseService } from './database/database-service';
 import { settings } from './config/settings';
 import { TradingDashboard } from './monitoring/dashboard';
+import { DashboardServer } from './dashboard/dashboard-server';
 
 // Import Redis service for background caching (optional)
 import { redisService } from './cache/redis-service';
@@ -120,9 +121,16 @@ async function main() {
         }, 60000); // Check every minute
         
         // Initialize trading dashboard
-        console.log('🖥️ Starting trading dashboard...');
-        const dashboard = new TradingDashboard(orderManager, portfolioManager);
-        await dashboard.start();
+        console.log('🖥️ Starting comprehensive trading dashboard...');
+        const dashboardServer = new DashboardServer(databaseService);
+        dashboardServer.setTradingAgent(tradingAgent);
+        dashboardServer.setPortfolioManager(portfolioManager);
+        dashboardServer.setDataCollector(dataCollector);
+        
+        // Start dashboard on the port specified by Heroku (or default 3000)
+        const port = process.env.PORT || 3000;
+        await dashboardServer.start(Number(port));
+        console.log(`🌐 Dashboard server started on port ${port}`);
         
         console.log('🔄 Starting trading loop with LIVE TRADE EXECUTION...');
 

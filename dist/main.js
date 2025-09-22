@@ -23,7 +23,7 @@ const portfolio_manager_1 = require("./portfolio/portfolio-manager");
 const risk_manager_1 = require("./portfolio/risk-manager");
 const database_service_1 = require("./database/database-service");
 const settings_1 = require("./config/settings");
-const dashboard_1 = require("./monitoring/dashboard");
+const dashboard_server_1 = require("./dashboard/dashboard-server");
 // Import Redis service for background caching (optional)
 const redis_service_1 = require("./cache/redis-service");
 // Add global error handlers to prevent crashes
@@ -104,9 +104,15 @@ async function main() {
             }
         }, 60000); // Check every minute
         // Initialize trading dashboard
-        console.log('🖥️ Starting trading dashboard...');
-        const dashboard = new dashboard_1.TradingDashboard(orderManager, portfolioManager);
-        await dashboard.start();
+        console.log('🖥️ Starting comprehensive trading dashboard...');
+        const dashboardServer = new dashboard_server_1.DashboardServer(databaseService);
+        dashboardServer.setTradingAgent(tradingAgent);
+        dashboardServer.setPortfolioManager(portfolioManager);
+        dashboardServer.setDataCollector(dataCollector);
+        // Start dashboard on the port specified by Heroku (or default 3000)
+        const port = process.env.PORT || 3000;
+        await dashboardServer.start(Number(port));
+        console.log(`🌐 Dashboard server started on port ${port}`);
         console.log('🔄 Starting trading loop with LIVE TRADE EXECUTION...');
         // IMPORTANT: Enable live trading (set to false for signal-only mode)
         const ENABLE_LIVE_TRADING = true; // Enabled for paper trading on testnet

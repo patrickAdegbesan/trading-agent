@@ -1,2 +1,1 @@
-web: node dist/dashboard/dashboard-server.js
-worker: npm start
+web: npm start
