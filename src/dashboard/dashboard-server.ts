@@ -112,9 +112,31 @@ export class DashboardServer {
             const trades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
             
+            // Get active orders from OrderManager if available
+            let activeOrdersCount = 0;
+            if (this.tradingAgent) {
+                try {
+                    // Access the order manager through trading agent to get real-time active orders
+                    const orderManager = (this.tradingAgent as any).orderManager;
+                    if (orderManager && orderManager.getActiveOrders) {
+                        activeOrdersCount = orderManager.getActiveOrders().length;
+                    } else if (orderManager && orderManager.getTradingStats) {
+                        const tradingStats = orderManager.getTradingStats();
+                        activeOrdersCount = tradingStats.activeOrders || 0;
+                    }
+                } catch (orderError) {
+                    console.warn('Could not get active orders from OrderManager:', orderError);
+                    // Fallback to database pending trades
+                    activeOrdersCount = trades.filter((t: any) => t.status === 'PENDING').length;
+                }
+            } else {
+                // Fallback to database pending trades
+                activeOrdersCount = trades.filter((t: any) => t.status === 'PENDING').length;
+            }
+            
             const stats = {
                 totalTrades: trades.length,
-                activeTrades: trades.filter((t: any) => t.status === 'PENDING').length,
+                activeTrades: activeOrdersCount,
                 completedTrades: trades.filter((t: any) => t.status === 'FILLED').length,
                 totalVolume: trades.reduce((sum: number, t: any) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
                 totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
@@ -139,14 +161,38 @@ export class DashboardServer {
             const limit = parseInt(req.query.limit as string) || 50;
             const trades = await this.databaseService.getTrades();
             
+            // Get active orders from OrderManager if available
+            let activeOrders: any[] = [];
+            if (this.tradingAgent) {
+                try {
+                    const orderManager = (this.tradingAgent as any).orderManager;
+                    if (orderManager && orderManager.listOrders) {
+                        const allOrders = orderManager.listOrders();
+                        activeOrders = allOrders
+                            .filter((order: any) => order.status === 'PENDING' || order.status === 'NEW')
+                            .map((order: any) => ({
+                                ...order,
+                                timestamp: order.timestamp || new Date().toISOString(),
+                                pnl: 0, // Active orders don't have P&L yet
+                                duration: 'Active'
+                            }));
+                    }
+                } catch (orderError) {
+                    console.warn('Could not get active orders for trades display:', orderError);
+                }
+            }
+            
+            // Combine completed trades and active orders
+            const allTrades = [...trades, ...activeOrders];
+            
             // Sort by timestamp descending and limit
-            const recentTrades = trades
+            const recentTrades = allTrades
                 .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                 .slice(0, limit)
                 .map((trade: any) => ({
                     ...trade,
-                    pnl: this.calculateTradePnL(trade),
-                    duration: this.calculateTradeDuration(trade)
+                    pnl: trade.pnl || this.calculateTradePnL(trade),
+                    duration: trade.duration || this.calculateTradeDuration(trade)
                 }));
             
             res.json(recentTrades);
