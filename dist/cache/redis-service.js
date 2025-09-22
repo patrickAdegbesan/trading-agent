@@ -7,7 +7,7 @@ exports.redisService = exports.RedisService = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
 const events_1 = require("events");
 class RedisService extends events_1.EventEmitter {
-    constructor(redisUrl = process.env.REDIS_URL || 'redis://localhost:6379') {
+    constructor(redisUrl = process.env.REDIS_URL || '') {
         super();
         this.client = null;
         this.isConnected = false;
@@ -19,15 +19,16 @@ class RedisService extends events_1.EventEmitter {
             connectionStatus: 'disconnected'
         };
         // Check if Redis is available in the environment
-        if (!process.env.REDIS_URL && process.env.NODE_ENV === 'production') {
+        if (!redisUrl || (!process.env.REDIS_URL && process.env.NODE_ENV === 'production')) {
             console.log('🔧 Redis not configured in production - running in fallback mode only');
             this.isConnected = false;
+            this.client = null;
             // Don't create Redis client if not configured
             return;
         }
         console.log(`🔗 Initializing Redis connection: ${redisUrl.replace(/\/\/.*@/, '//***@')}`);
         this.client = new ioredis_1.default(redisUrl, {
-            maxRetriesPerRequest: 3,
+            maxRetriesPerRequest: 0, // Disable retries completely
             lazyConnect: true,
             connectTimeout: 5000,
             enableReadyCheck: false,
@@ -49,7 +50,13 @@ class RedisService extends events_1.EventEmitter {
             console.warn('⚠️ Redis connection error (using fallback):', error.message);
             this.isConnected = false;
             this.stats.connectionStatus = 'disconnected';
-            this.emit('error', error);
+            // Prevent Redis errors from becoming uncaught exceptions
+            try {
+                this.emit('error', error);
+            }
+            catch (err) {
+                // Ignore emit errors to prevent cascading failures
+            }
         });
         this.client.on('close', () => {
             this.isConnected = false;
