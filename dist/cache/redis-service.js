@@ -18,22 +18,27 @@ class RedisService extends events_1.EventEmitter {
             totalOperations: 0,
             connectionStatus: 'disconnected'
         };
-        // Check if Redis is available in the environment
-        if (!redisUrl || (!process.env.REDIS_URL && process.env.NODE_ENV === 'production')) {
-            console.log('🔧 Redis not configured in production - running in fallback mode only');
+        // Check if Redis URL is provided by Heroku or environment
+        if (!redisUrl) {
+            console.log('🔧 No Redis URL found - running in fallback mode only');
             this.isConnected = false;
             this.client = null;
-            // Don't create Redis client if not configured
             return;
         }
-        console.log(`🔗 Initializing Redis connection: ${redisUrl.replace(/\/\/.*@/, '//***@')}`);
+        // Log the connection attempt (hide credentials)
+        const maskedUrl = redisUrl.replace(/\/\/.*@/, '//***@');
+        console.log(`🔗 Connecting to Redis: ${maskedUrl}`);
         this.client = new ioredis_1.default(redisUrl, {
-            maxRetriesPerRequest: 0, // Disable retries completely
+            maxRetriesPerRequest: 3,
             lazyConnect: true,
-            connectTimeout: 5000,
-            enableReadyCheck: false,
+            connectTimeout: 10000,
+            enableReadyCheck: true,
             enableOfflineQueue: false,
-            reconnectOnError: () => false // Disable automatic reconnection
+            // Allow reconnection for Heroku Redis
+            reconnectOnError: (err) => {
+                const targetError = 'READONLY';
+                return err.message.includes(targetError);
+            }
         });
         this.setupEventHandlers();
     }
