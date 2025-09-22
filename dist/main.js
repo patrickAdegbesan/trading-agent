@@ -40,6 +40,10 @@ process.on('unhandledRejection', (reason, promise) => {
 async function main() {
     try {
         console.log('🚀 Starting Crypto Trading Agent...');
+        // Cache to track last processed market data to avoid duplicate predictions
+        const lastProcessedData = new Map();
+        const MIN_PRICE_CHANGE_PERCENT = 0.1; // Only process if price changed by at least 0.1%
+        const MIN_TIME_BETWEEN_PREDICTIONS = 30000; // Minimum 30 seconds between predictions
         // Initialize Redis cache service
         // Optional: Initialize Redis cache (non-blocking)
         console.log('🔗 Connecting to Redis cache...');
@@ -97,6 +101,23 @@ async function main() {
                 // Execute trades for each symbol with enhanced ML predictions
                 for (const [symbol, data] of marketSnapshot.symbols) {
                     if (data.features && Object.keys(data.features).length > 10) { // Ensure we have indicators
+                        // 🔍 CHECK FOR DATA CHANGES - Avoid duplicate predictions
+                        const now = Date.now();
+                        const lastData = lastProcessedData.get(symbol);
+                        if (lastData) {
+                            const priceChange = Math.abs(data.close - lastData.price) / lastData.price * 100;
+                            const timeSinceLastPrediction = now - lastData.timestamp;
+                            // Skip if price hasn't changed enough AND not enough time has passed
+                            if (priceChange < MIN_PRICE_CHANGE_PERCENT && timeSinceLastPrediction < MIN_TIME_BETWEEN_PREDICTIONS) {
+                                continue; // Skip this iteration - no significant change
+                            }
+                        }
+                        // Update cache with current data
+                        lastProcessedData.set(symbol, {
+                            price: data.close,
+                            timestamp: now,
+                            volume: data.volume
+                        });
                         // Get historical data for ML analysis
                         const marketDataBuffer = dataCollector.getHistoricalData(symbol, 50);
                         const priceHistory = marketDataBuffer.length > 0 ? marketDataBuffer.map(d => d.close) : [data.close];

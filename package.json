@@ -5,6 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
+    "postinstall": "npm run build",
     "start": "node dist/main.js",
     "dev": "ts-node src/main.ts",
     "dashboard": "ts-node src/dashboard/dashboard-server.ts",
@@ -47,7 +48,7 @@
     "technicalindicators": "^3.1.0",
     "uuid": "^9.0.0",
     "winston": "^3.10.0",
-    "ws": "^8.16.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.3",

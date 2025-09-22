@@ -1,2 +1,2 @@
-web: npm run dashboard
-worker: npm start
+web: npm run dashboard:prod
+worker: npm run build && npm start

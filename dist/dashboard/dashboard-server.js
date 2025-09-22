@@ -1,58 +1,46 @@
-import express from 'express';
-import path from 'path';
-import { DatabaseService } from '../database/database-service';
-import { TradingAgent } from '../agents/trading-agent';
-import { PortfolioManager } from '../portfolio/portfolio-manager';
-import { DataCollector } from '../market-data/data-collector';
-
-export class DashboardServer {
-    private app: express.Application;
-    private databaseService: DatabaseService;
-    private tradingAgent?: TradingAgent;
-    private portfolioManager?: PortfolioManager;
-    private dataCollector?: DataCollector;
-    private currentStats: any = {};
-    private lastUpdate: Date = new Date();
-
-    constructor(databaseService: DatabaseService) {
-        this.app = express();
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DashboardServer = void 0;
+const express_1 = __importDefault(require("express"));
+const path_1 = __importDefault(require("path"));
+class DashboardServer {
+    constructor(databaseService) {
+        this.currentStats = {};
+        this.lastUpdate = new Date();
+        this.app = (0, express_1.default)();
         this.databaseService = databaseService;
         this.setupMiddleware();
         this.setupRoutes();
         this.initializeStats();
     }
-
-    public setTradingAgent(agent: TradingAgent) {
+    setTradingAgent(agent) {
         this.tradingAgent = agent;
     }
-
-    public setPortfolioManager(manager: PortfolioManager) {
+    setPortfolioManager(manager) {
         this.portfolioManager = manager;
     }
-
-    public setDataCollector(collector: DataCollector) {
+    setDataCollector(collector) {
         this.dataCollector = collector;
     }
-
-    private setupMiddleware() {
+    setupMiddleware() {
         // Enable CORS for dashboard access
         this.app.use((req, res, next) => {
             res.header('Access-Control-Allow-Origin', '*');
             res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
             next();
         });
-
         // Serve static files (dashboard UI)
-        this.app.use(express.static(path.join(__dirname, '../../public')));
-        this.app.use(express.json());
+        this.app.use(express_1.default.static(path_1.default.join(__dirname, '../../public')));
+        this.app.use(express_1.default.json());
     }
-
-    private setupRoutes() {
+    setupRoutes() {
         // Main dashboard route
         this.app.get('/', (req, res) => {
-            res.sendFile(path.join(__dirname, '../../public/dashboard.html'));
+            res.sendFile(path_1.default.join(__dirname, '../../public/dashboard.html'));
         });
-
         // API Routes
         this.app.get('/api/status', this.getStatus.bind(this));
         this.app.get('/api/stats', this.getStats.bind(this));
@@ -61,36 +49,33 @@ export class DashboardServer {
         this.app.get('/api/ml-predictions', this.getMLPredictions.bind(this));
         this.app.get('/api/live-data', this.getLiveData.bind(this));
         this.app.get('/api/portfolio', this.getPortfolio.bind(this));
-
         // Health check
         this.app.get('/health', (req, res) => {
-            res.json({ 
+            res.json({
                 status: 'healthy',
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString()
             });
         });
     }
-
-    private async initializeStats() {
+    async initializeStats() {
         try {
             // Initialize current stats from database
             const trades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
-            
             this.currentStats = {
                 totalTrades: trades.length,
-                activeTrades: trades.filter((t: any) => t.status === 'PENDING').length,
-                totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
+                activeTrades: trades.filter((t) => t.status === 'PENDING').length,
+                totalPnL: performance.reduce((sum, p) => sum + (p.totalPnL || 0), 0),
                 winRate: this.calculateWinRate(trades),
                 lastUpdate: new Date().toISOString()
             };
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to initialize dashboard stats:', error);
         }
     }
-
-    private async getStatus(req: express.Request, res: express.Response) {
+    async getStatus(req, res) {
         try {
             const status = {
                 botStatus: 'running',
@@ -102,22 +87,21 @@ export class DashboardServer {
                 version: '1.0.0'
             };
             res.json(status);
-        } catch (error) {
+        }
+        catch (error) {
             res.status(500).json({ error: 'Failed to get status' });
         }
     }
-
-    private async getStats(req: express.Request, res: express.Response) {
+    async getStats(req, res) {
         try {
             const trades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
-            
             const stats = {
                 totalTrades: trades.length,
-                activeTrades: trades.filter((t: any) => t.status === 'PENDING').length,
-                completedTrades: trades.filter((t: any) => t.status === 'FILLED').length,
-                totalVolume: trades.reduce((sum: number, t: any) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
-                totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
+                activeTrades: trades.filter((t) => t.status === 'PENDING').length,
+                completedTrades: trades.filter((t) => t.status === 'FILLED').length,
+                totalVolume: trades.reduce((sum, t) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
+                totalPnL: performance.reduce((sum, p) => sum + (p.totalPnL || 0), 0),
                 winRate: this.calculateWinRate(trades),
                 averageHoldTime: this.calculateAverageHoldTime(trades),
                 bestTrade: this.getBestTrade(trades),
@@ -125,69 +109,62 @@ export class DashboardServer {
                 dailyPnL: this.getDailyPnL(performance),
                 lastUpdate: new Date().toISOString()
             };
-            
             this.currentStats = stats;
             res.json(stats);
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to get stats:', error);
             res.status(500).json({ error: 'Failed to get statistics' });
         }
     }
-
-    private async getTrades(req: express.Request, res: express.Response) {
+    async getTrades(req, res) {
         try {
-            const limit = parseInt(req.query.limit as string) || 50;
+            const limit = parseInt(req.query.limit) || 50;
             const trades = await this.databaseService.getTrades();
-            
             // Sort by timestamp descending and limit
             const recentTrades = trades
-                .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                 .slice(0, limit)
-                .map((trade: any) => ({
-                    ...trade,
-                    pnl: this.calculateTradePnL(trade),
-                    duration: this.calculateTradeDuration(trade)
-                }));
-            
+                .map((trade) => ({
+                ...trade,
+                pnl: this.calculateTradePnL(trade),
+                duration: this.calculateTradeDuration(trade)
+            }));
             res.json(recentTrades);
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to get trades:', error);
             res.status(500).json({ error: 'Failed to get trades' });
         }
     }
-
-    private async getPerformance(req: express.Request, res: express.Response) {
+    async getPerformance(req, res) {
         try {
             const performance = await this.databaseService.getPerformance();
-            const days = parseInt(req.query.days as string) || 30;
-            
+            const days = parseInt(req.query.days) || 30;
             // Get performance data for the last N days
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
-            
             const recentPerformance = performance
-                .filter((p: any) => new Date(p.timestamp) >= cutoffDate)
-                .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-            
+                .filter((p) => new Date(p.timestamp) >= cutoffDate)
+                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             const chartData = this.formatPerformanceChartData(recentPerformance);
-            
             res.json({
                 performance: recentPerformance,
                 chartData,
                 summary: {
-                    totalPnL: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
+                    totalPnL: recentPerformance.reduce((sum, p) => sum + (p.totalPnL || 0), 0),
                     totalTrades: recentPerformance.length,
-                    avgDaily: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0) / days,
+                    avgDaily: recentPerformance.reduce((sum, p) => sum + (p.totalPnL || 0), 0) / days,
                     maxDrawdown: this.calculateMaxDrawdown(recentPerformance)
                 }
             });
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to get performance:', error);
             res.status(500).json({ error: 'Failed to get performance data' });
         }
     }
-
-    private async getMLPredictions(req: express.Request, res: express.Response) {
+    async getMLPredictions(req, res) {
         try {
             // This would integrate with your ML prediction system
             const predictions = {
@@ -196,14 +173,13 @@ export class DashboardServer {
                 ADAUSDT: { side: 'BUY', confidence: 0.55, lastUpdate: new Date().toISOString() },
                 SOLUSDT: { side: 'SELL', confidence: 0.60, lastUpdate: new Date().toISOString() }
             };
-            
             res.json(predictions);
-        } catch (error) {
+        }
+        catch (error) {
             res.status(500).json({ error: 'Failed to get ML predictions' });
         }
     }
-
-    private async getLiveData(req: express.Request, res: express.Response) {
+    async getLiveData(req, res) {
         try {
             // Real-time market data
             const liveData = {
@@ -215,14 +191,13 @@ export class DashboardServer {
                 },
                 timestamp: new Date().toISOString()
             };
-            
             res.json(liveData);
-        } catch (error) {
+        }
+        catch (error) {
             res.status(500).json({ error: 'Failed to get live data' });
         }
     }
-
-    private async getPortfolio(req: express.Request, res: express.Response) {
+    async getPortfolio(req, res) {
         try {
             // Portfolio information
             const portfolio = {
@@ -239,92 +214,80 @@ export class DashboardServer {
                 },
                 lastUpdate: new Date().toISOString()
             };
-            
             res.json(portfolio);
-        } catch (error) {
+        }
+        catch (error) {
             res.status(500).json({ error: 'Failed to get portfolio data' });
         }
     }
-
     // Helper methods
-    private calculateWinRate(trades: any[]): number {
+    calculateWinRate(trades) {
         const completedTrades = trades.filter(t => t.status === 'closed');
-        if (completedTrades.length === 0) return 0;
-        
+        if (completedTrades.length === 0)
+            return 0;
         const winningTrades = completedTrades.filter(t => parseFloat(t.pnl || '0') > 0);
         return (winningTrades.length / completedTrades.length) * 100;
     }
-
-    private calculateAverageHoldTime(trades: any[]): number {
-        const completedTrades = trades.filter((t: any) => t.status === 'FILLED' && t.exit_time);
-        if (completedTrades.length === 0) return 0;
-        
-        const totalHoldTime = completedTrades.reduce((sum: number, trade: any) => {
+    calculateAverageHoldTime(trades) {
+        const completedTrades = trades.filter((t) => t.status === 'FILLED' && t.exit_time);
+        if (completedTrades.length === 0)
+            return 0;
+        const totalHoldTime = completedTrades.reduce((sum, trade) => {
             const entry = new Date(trade.timestamp).getTime();
             const exit = new Date(trade.exit_time).getTime();
             return sum + (exit - entry);
         }, 0);
-        
         return totalHoldTime / completedTrades.length / (1000 * 60 * 60); // hours
     }
-
-    private getBestTrade(trades: any[]): any {
-        return trades.reduce((best: any, trade: any) => {
+    getBestTrade(trades) {
+        return trades.reduce((best, trade) => {
             const pnl = parseFloat(trade.pnl || '0');
             const bestPnl = parseFloat(best?.pnl || '0');
             return pnl > bestPnl ? trade : best;
         }, null);
     }
-
-    private getWorstTrade(trades: any[]): any {
-        return trades.reduce((worst: any, trade: any) => {
+    getWorstTrade(trades) {
+        return trades.reduce((worst, trade) => {
             const pnl = parseFloat(trade.pnl || '0');
             const worstPnl = parseFloat(worst?.pnl || '0');
             return pnl < worstPnl ? trade : worst;
         }, null);
     }
-
-    private getDailyPnL(performance: any[]): number {
+    getDailyPnL(performance) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
         return performance
-            .filter((p: any) => new Date(p.timestamp) >= today)
-            .reduce((sum: number, p: any) => sum + (p.realized_pnl || 0), 0);
+            .filter((p) => new Date(p.timestamp) >= today)
+            .reduce((sum, p) => sum + (p.realized_pnl || 0), 0);
     }
-
-    private calculateTradePnL(trade: any): number {
+    calculateTradePnL(trade) {
         if (trade.status === 'closed' && trade.exit_price) {
             const entry = parseFloat(trade.price);
             const exit = parseFloat(trade.exit_price);
             const quantity = parseFloat(trade.quantity);
-            
             if (trade.side === 'BUY') {
                 return (exit - entry) * quantity;
-            } else {
+            }
+            else {
                 return (entry - exit) * quantity;
             }
         }
         return 0;
     }
-
-    private calculateTradeDuration(trade: any): string {
+    calculateTradeDuration(trade) {
         if (trade.exit_time) {
             const entry = new Date(trade.timestamp);
             const exit = new Date(trade.exit_time);
             const duration = exit.getTime() - entry.getTime();
-            
             const hours = Math.floor(duration / (1000 * 60 * 60));
             const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
-            
             return `${hours}h ${minutes}m`;
         }
         return 'Active';
     }
-
-    private formatPerformanceChartData(performance: any[]): any[] {
+    formatPerformanceChartData(performance) {
         let cumulativePnL = 0;
-        return performance.map((p: any) => {
+        return performance.map((p) => {
             cumulativePnL += p.realized_pnl || 0;
             return {
                 timestamp: p.timestamp,
@@ -334,12 +297,10 @@ export class DashboardServer {
             };
         });
     }
-
-    private calculateMaxDrawdown(performance: any[]): number {
+    calculateMaxDrawdown(performance) {
         let peak = 0;
         let maxDrawdown = 0;
         let cumulativePnL = 0;
-        
         for (const p of performance) {
             cumulativePnL += p.realized_pnl || 0;
             if (cumulativePnL > peak) {
@@ -350,16 +311,13 @@ export class DashboardServer {
                 maxDrawdown = drawdown;
             }
         }
-        
         return maxDrawdown;
     }
-
-    public updateStats(newStats: any) {
+    updateStats(newStats) {
         this.currentStats = { ...this.currentStats, ...newStats };
         this.lastUpdate = new Date();
     }
-
-    public start(port: number = 3000): Promise<void> {
+    start(port = 3000) {
         return new Promise((resolve) => {
             this.app.listen(port, () => {
                 console.log(`📊 Dashboard server running on port ${port}`);
@@ -368,8 +326,9 @@ export class DashboardServer {
             });
         });
     }
-
-    public getApp(): express.Application {
+    getApp() {
         return this.app;
     }
 }
+exports.DashboardServer = DashboardServer;
+//# sourceMappingURL=dashboard-server.js.map

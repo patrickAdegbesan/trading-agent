@@ -254,6 +254,15 @@ export class DatabaseService extends EventEmitter {
     return this.isConnected;
   }
 
+  // Methods for dashboard API compatibility
+  async getTrades(symbol?: string, limit?: number): Promise<TradeRecord[]> {
+    return this.getTradeHistory(symbol, limit);
+  }
+
+  async getPerformance(): Promise<PerformanceMetrics[]> {
+    return this.getPerformanceHistory();
+  }
+
   // Statistics for dashboard
   getStatistics() {
     const trades = this.db.getAllTrades();

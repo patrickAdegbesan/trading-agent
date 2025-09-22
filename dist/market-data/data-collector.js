@@ -20,6 +20,8 @@ class DataCollector extends events_1.EventEmitter {
         this.reconnectDelay = 1000; // Start with 1 second
         this.dataValidationErrors = 0;
         this.maxValidationErrors = 100;
+        this.lastHealthCheckTime = 0;
+        this.lastReconnectTime = 0;
         this.exchangeConnector = exchangeConnector;
         this.indicators = new indicators_1.TechnicalIndicators();
         this.symbols = symbols;
@@ -96,7 +98,7 @@ class DataCollector extends events_1.EventEmitter {
             // Load initial historical data
             await this.loadInitialData();
             // Subscribe to real-time data streams - SAFELY RE-ENABLED
-            this.subscribeToRealTimeData();
+            await this.subscribeToRealTimeData();
             // Start health check
             this.startHealthCheck();
             this.isCollecting = true;
@@ -166,34 +168,73 @@ class DataCollector extends events_1.EventEmitter {
         await Promise.allSettled(promises);
         this.logger.info('Historical data loading completed');
     }
-    subscribeToRealTimeData() {
+    async subscribeToRealTimeData() {
         this.logger.info('Starting real-time data subscriptions');
-        for (const symbol of this.symbols) {
-            // Subscribe to 1-minute klines for primary data
-            this.exchangeConnector.subscribeToKlines(symbol, '1m');
-            // Subscribe to ticker for real-time price updates
-            this.exchangeConnector.subscribeToTicker(symbol);
-            this.logger.debug(`Subscribed to real-time data for ${symbol}`);
-        }
-        // Start fallback polling in case WebSocket connections fail
+        // ✅ USING REST API ONLY - More reliable than WebSocket
+        this.logger.warn('🚨 Using REST API polling mode only - WebSocket disabled for stability');
+        // Skip WebSocket connections entirely - they're causing connection loops
+        // Start REST API polling as primary data source
         this.startFallbackPolling();
     }
     startFallbackPolling() {
-        // Poll for price updates every 10 seconds as fallback
+        // Aggressive polling since WebSocket connections are failing
+        // Poll for price updates every 30 seconds as primary data source
         setInterval(async () => {
             try {
+                const now = Date.now();
+                const staleThreshold = 30000; // 30 seconds stale threshold (aggressive polling)
                 for (const symbol of this.symbols) {
-                    const ticker = await this.exchangeConnector.getTickerData(symbol);
-                    if (ticker) {
-                        this.currentPrices.set(symbol, parseFloat(ticker.price));
-                        this.logger.debug(`Fallback price update for ${symbol}: ${ticker.price}`);
+                    const buffer = this.dataBuffers.get(symbol);
+                    // Always make REST call if data is stale or missing
+                    if (!buffer || (now - buffer.lastUpdate) > staleThreshold) {
+                        this.logger.info(`🔄 Polling ${symbol} via REST API (WebSocket fallback: ${buffer ? (now - buffer.lastUpdate) / 1000 : 'no data'}s stale)`);
+                        try {
+                            // Get current price via REST API
+                            const ticker = await this.exchangeConnector.getTickerData(symbol);
+                            if (ticker) {
+                                const price = parseFloat(ticker.price);
+                                this.currentPrices.set(symbol, price);
+                                this.emit('priceUpdate', { symbol, price, timestamp: now });
+                                // Also get recent kline data
+                                const klines = await this.exchangeConnector.getKlines(symbol, '1m', 1);
+                                if (klines && klines.length > 0) {
+                                    const kline = klines[0];
+                                    const candleData = {
+                                        open: parseFloat(kline.open),
+                                        high: parseFloat(kline.high),
+                                        low: parseFloat(kline.low),
+                                        close: parseFloat(kline.close),
+                                        volume: parseFloat(kline.volume),
+                                        timestamp: kline.openTime
+                                    };
+                                    const features = this.indicators.addCandle(symbol, candleData);
+                                    const dataPoint = {
+                                        symbol,
+                                        timestamp: kline.openTime,
+                                        open: candleData.open,
+                                        high: candleData.high,
+                                        low: candleData.low,
+                                        close: candleData.close,
+                                        volume: candleData.volume,
+                                        features
+                                    };
+                                    this.addToBuffer(symbol, dataPoint);
+                                    this.emit('newCandle', dataPoint);
+                                }
+                                this.logger.debug(`✅ Updated ${symbol}: $${price}`);
+                            }
+                        }
+                        catch (error) {
+                            this.logger.warn(`⚠️ Failed to fetch ${symbol} data via REST API`, { error: error.message });
+                        }
                     }
                 }
             }
             catch (error) {
-                this.logger.warn('Fallback polling error', { error });
+                this.logger.error('Error in fallback polling', { error: error.message });
             }
-        }, 10000);
+        }, 30000); // Poll every 30 seconds
+        this.logger.info('🔄 Started aggressive REST API polling (WebSocket fallback mode)');
     }
     processKlineData(klineData) {
         try {
@@ -323,27 +364,43 @@ class DataCollector extends events_1.EventEmitter {
         this.logger.info(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
         setTimeout(async () => {
             try {
-                // Only restart real-time subscriptions, don't reconnect the main client
-                this.subscribeToRealTimeData();
+                this.logger.info('Cleaning up old connections before reconnection...');
+                // First, disconnect existing websockets to avoid conflicts
+                await this.exchangeConnector.disconnect();
+                // Wait a moment for cleanup
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Reconnect to exchange
+                await this.exchangeConnector.connect();
+                // Restart real-time subscriptions with fresh connections
+                await this.subscribeToRealTimeData();
                 this.reconnectAttempts = 0; // Reset on successful reconnection
+                this.reconnectDelay = 1000; // Reset delay
+                this.logger.info('✅ Reconnection successful');
             }
             catch (error) {
                 this.logger.error('Reconnection failed', { error });
-                this.handleReconnection(); // Try again
+                // Prevent infinite loop - only retry if we haven't exceeded attempts
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    setTimeout(() => this.handleReconnection(), Math.min(delay * 2, 60000)); // Exponential backoff with max 1 minute
+                }
+                else {
+                    this.logger.error('Max reconnection attempts reached, stopping further attempts');
+                    await this.stopCollection();
+                }
             }
         }, delay);
     }
     startHealthCheck() {
         this.healthCheckInterval = setInterval(() => {
             this.performHealthCheck();
-        }, 60000); // Check every minute
+        }, 300000); // Check every 5 minutes instead of every minute
     }
     async performHealthCheck() {
         try {
             // Check if we're still receiving data
             const now = Date.now();
-            const staleThreshold = 120000; // 2 minutes
-            const reconnectThreshold = 300000; // 5 minutes - trigger reconnection
+            const staleThreshold = 300000; // 5 minutes - increased threshold
+            const reconnectThreshold = 600000; // 10 minutes - trigger reconnection only after longer delay
             let shouldReconnect = false;
             for (const [symbol, buffer] of this.dataBuffers) {
                 const timeSinceUpdate = now - buffer.lastUpdate;
@@ -356,24 +413,43 @@ class DataCollector extends events_1.EventEmitter {
                     }
                 }
             }
-            // Check exchange connectivity
-            const healthStatus = await this.exchangeConnector.healthCheck();
-            if (healthStatus.status !== 'healthy') {
-                this.logger.warn('Exchange health check failed', { healthStatus });
-                shouldReconnect = true;
+            // Only check exchange connectivity every 5 minutes to avoid aggressive reconnections
+            const lastHealthCheck = this.lastHealthCheckTime || 0;
+            const timeSinceLastHealthCheck = now - lastHealthCheck;
+            if (timeSinceLastHealthCheck > 300000) { // 5 minutes
+                try {
+                    const healthStatus = await this.exchangeConnector.healthCheck();
+                    this.lastHealthCheckTime = now;
+                    if (healthStatus.status !== 'healthy') {
+                        this.logger.warn('Exchange health check failed', { healthStatus });
+                        // Only reconnect if we haven't reconnected recently
+                        const timeSinceLastReconnect = now - (this.lastReconnectTime || 0);
+                        if (timeSinceLastReconnect > 300000) { // 5 minutes since last reconnect
+                            shouldReconnect = true;
+                        }
+                    }
+                }
+                catch (error) {
+                    this.logger.error('Exchange health check error:', error);
+                    // Don't reconnect on health check errors to avoid loops
+                }
             }
-            // Trigger reconnection if needed
+            // Trigger reconnection if needed and not too recently
             if (shouldReconnect && this.isCollecting) {
-                this.logger.info('Attempting automatic reconnection due to health check failure...');
-                await this.handleReconnection();
+                const timeSinceLastReconnect = now - (this.lastReconnectTime || 0);
+                if (timeSinceLastReconnect > 300000) { // 5 minutes minimum between reconnects
+                    this.logger.info('Attempting automatic reconnection due to health check failure...');
+                    this.lastReconnectTime = now;
+                    await this.handleReconnection();
+                }
+                else {
+                    this.logger.info('Skipping reconnection - too recent since last attempt');
+                }
             }
         }
         catch (error) {
             this.logger.error('Health check failed', { error });
-            // On health check failure, also try to reconnect
-            if (this.isCollecting) {
-                await this.handleReconnection();
-            }
+            // Don't trigger reconnection on health check errors to avoid loops
         }
     }
     // Public API methods

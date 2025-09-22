@@ -298,10 +298,10 @@ class ExchangeConnector extends events_1.EventEmitter {
             : `wss://stream.binance.com/ws/${streamName}`; // Production format
         const ws = new reconnecting_websocket_1.default(wsUrl, [], {
             WebSocket: ws_1.default,
-            connectionTimeout: 10000, // Increased timeout
-            maxRetries: 5, // Reduced retries to avoid spam
-            maxReconnectionDelay: 30000,
-            minReconnectionDelay: 2000,
+            connectionTimeout: 30000, // Increased timeout to 30 seconds for reliability
+            maxRetries: 3, // Reduced retries to avoid rate limits
+            maxReconnectionDelay: 60000, // Longer delay between reconnections
+            minReconnectionDelay: 5000, // Start with 5 seconds delay
         });
         // Add error handler to prevent unhandled events
         ws.onerror = (error) => {

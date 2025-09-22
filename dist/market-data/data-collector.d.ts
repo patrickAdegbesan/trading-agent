@@ -37,6 +37,8 @@ export declare class DataCollector extends EventEmitter {
     private healthCheckInterval?;
     private dataValidationErrors;
     private maxValidationErrors;
+    private lastHealthCheckTime;
+    private lastReconnectTime;
     constructor(exchangeConnector: ExchangeConnector, symbols?: string[]);
     private initializeBuffers;
     private setupEventHandlers;

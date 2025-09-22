@@ -34,6 +34,8 @@ export declare class DatabaseService extends EventEmitter {
     getPerformanceHistory(): PerformanceMetrics[];
     getMarketDataForTraining(symbol: string, limit?: number): MarketDataRecord[];
     isHealthy(): boolean;
+    getTrades(symbol?: string, limit?: number): Promise<TradeRecord[]>;
+    getPerformance(): Promise<PerformanceMetrics[]>;
     getStatistics(): {
         totalTrades: number;
         activeTrades: number;

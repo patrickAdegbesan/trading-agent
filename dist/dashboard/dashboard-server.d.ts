@@ -1,0 +1,41 @@
+import express from 'express';
+import { DatabaseService } from '../database/database-service';
+import { TradingAgent } from '../agents/trading-agent';
+import { PortfolioManager } from '../portfolio/portfolio-manager';
+import { DataCollector } from '../market-data/data-collector';
+export declare class DashboardServer {
+    private app;
+    private databaseService;
+    private tradingAgent?;
+    private portfolioManager?;
+    private dataCollector?;
+    private currentStats;
+    private lastUpdate;
+    constructor(databaseService: DatabaseService);
+    setTradingAgent(agent: TradingAgent): void;
+    setPortfolioManager(manager: PortfolioManager): void;
+    setDataCollector(collector: DataCollector): void;
+    private setupMiddleware;
+    private setupRoutes;
+    private initializeStats;
+    private getStatus;
+    private getStats;
+    private getTrades;
+    private getPerformance;
+    private getMLPredictions;
+    private getLiveData;
+    private getPortfolio;
+    private calculateWinRate;
+    private calculateAverageHoldTime;
+    private getBestTrade;
+    private getWorstTrade;
+    private getDailyPnL;
+    private calculateTradePnL;
+    private calculateTradeDuration;
+    private formatPerformanceChartData;
+    private calculateMaxDrawdown;
+    updateStats(newStats: any): void;
+    start(port?: number): Promise<void>;
+    getApp(): express.Application;
+}
+//# sourceMappingURL=dashboard-server.d.ts.map

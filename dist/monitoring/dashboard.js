@@ -92,8 +92,8 @@ class TradingDashboard {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e0e6ed;
             min-height: 100vh;
         }
         .container { 
@@ -104,21 +104,25 @@ class TradingDashboard {
         .header { 
             text-align: center; 
             margin-bottom: 30px; 
-            color: white;
+            color: #ffffff;
         }
         .header h1 { 
             font-size: 2.5rem; 
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            background: linear-gradient(45deg, #00d4ff, #5b86e5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         .status { 
             display: inline-block; 
             padding: 8px 16px; 
-            background: #27ae60; 
-            color: white; 
+            background: linear-gradient(45deg, #00ff88, #00d4ff); 
+            color: #1a1a2e; 
             border-radius: 20px; 
             font-weight: bold;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
         }
         .grid { 
             display: grid; 
@@ -127,18 +131,24 @@ class TradingDashboard {
             margin-bottom: 30px; 
         }
         .card { 
-            background: white; 
+            background: linear-gradient(145deg, #232946 0%, #1a1a2e 100%); 
             border-radius: 15px; 
             padding: 25px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
         }
         .card h3 { 
-            color: #2c3e50; 
+            color: #00d4ff; 
             margin-bottom: 15px; 
             font-size: 1.3rem;
-            border-bottom: 2px solid #3498db;
+            border-bottom: 2px solid #00d4ff;
             padding-bottom: 8px;
         }
         .metric { 
@@ -146,19 +156,19 @@ class TradingDashboard {
             justify-content: space-between; 
             margin: 10px 0; 
             padding: 8px 0;
-            border-bottom: 1px solid #ecf0f1;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
         .metric:last-child { border-bottom: none; }
         .metric-label { 
-            color: #7f8c8d; 
+            color: #a0a9ba; 
             font-weight: 500;
         }
         .metric-value { 
             font-weight: bold; 
-            color: #2c3e50;
+            color: #e0e6ed;
         }
-        .positive { color: #27ae60; }
-        .negative { color: #e74c3c; }
+        .positive { color: #00ff88; }
+        .negative { color: #ff6b6b; }
         .orders-table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -167,15 +177,16 @@ class TradingDashboard {
         .orders-table th, .orders-table td { 
             padding: 12px; 
             text-align: left; 
-            border-bottom: 1px solid #ecf0f1;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            color: #e0e6ed;
         }
         .orders-table th { 
-            background: #f8f9fa; 
+            background: rgba(0, 212, 255, 0.1); 
             font-weight: 600;
-            color: #2c3e50;
+            color: #00d4ff;
         }
         .orders-table tr:hover { 
-            background: #f8f9fa; 
+            background: rgba(255,255,255,0.05); 
         }
         .status-badge { 
             padding: 4px 8px; 
@@ -183,22 +194,22 @@ class TradingDashboard {
             font-size: 0.8rem; 
             font-weight: bold;
         }
-        .status-submitted { background: #3498db; color: white; }
-        .status-filled { background: #27ae60; color: white; }
-        .status-cancelled { background: #e74c3c; color: white; }
+        .status-submitted { background: linear-gradient(45deg, #00d4ff, #5b86e5); color: white; }
+        .status-filled { background: linear-gradient(45deg, #00ff88, #00d4ff); color: #1a1a2e; }
+        .status-cancelled { background: linear-gradient(45deg, #ff6b6b, #ff8e8e); color: white; }
         .auto-refresh { 
             text-align: center; 
             margin-top: 20px; 
-            color: white;
+            color: #a0a9ba;
             font-size: 0.9rem;
         }
         .loading { 
             text-align: center; 
-            color: #7f8c8d; 
+            color: #a0a9ba; 
             font-style: italic;
         }
         .refresh-btn {
-            background: #3498db;
+            background: linear-gradient(45deg, #00d4ff, #5b86e5);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -207,11 +218,12 @@ class TradingDashboard {
             font-weight: bold;
             margin: 10px;
             transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
         }
         .refresh-btn:hover {
-            background: #2980b9;
+            background: linear-gradient(45deg, #5b86e5, #00d4ff);
             transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
         }
     </style>
 </head>
@@ -377,7 +389,7 @@ class TradingDashboard {
                 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
-                document.getElementById('portfolio-data').innerHTML = '<div style="color: #e74c3c;">Error loading data</div>';
+                document.getElementById('portfolio-data').innerHTML = '<div style="color: #ff6b6b;">Error loading data</div>';
             }
         }
 

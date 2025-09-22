@@ -197,6 +197,13 @@ class DatabaseService extends events_1.EventEmitter {
     isHealthy() {
         return this.isConnected;
     }
+    // Methods for dashboard API compatibility
+    async getTrades(symbol, limit) {
+        return this.getTradeHistory(symbol, limit);
+    }
+    async getPerformance() {
+        return this.getPerformanceHistory();
+    }
     // Statistics for dashboard
     getStatistics() {
         const trades = this.db.getAllTrades();
