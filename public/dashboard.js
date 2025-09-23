@@ -35,22 +35,38 @@ class TradingDashboard {
 
     initializeCharts() {
         try {
+            console.log('🎯 Starting chart initialization...');
+            
+            // Check if Chart.js is available
+            if (typeof Chart === 'undefined') {
+                console.error('❌ Chart.js is not loaded!');
+                return;
+            }
+            
             // Performance Chart
-            const performanceCtx = document.getElementById('performanceChart').getContext('2d');
-            console.log('Initializing performance chart...');
+            const performanceCanvas = document.getElementById('performanceChart');
+            if (!performanceCanvas) {
+                console.error('❌ Performance chart canvas not found!');
+                return;
+            }
+            
+            console.log('📊 Creating performance chart...');
+            const performanceCtx = performanceCanvas.getContext('2d');
             
             this.charts.performance = new Chart(performanceCtx, {
                 type: 'line',
                 data: {
-                    labels: [],
+                    labels: ['Start'],
                     datasets: [{
                         label: 'Cumulative P&L',
-                        data: [],
+                        data: [0],
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 2,
+                        borderWidth: 3,
                         fill: true,
-                        tension: 0.4
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -58,7 +74,7 @@ class TradingDashboard {
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            type: 'category', // Change from 'time' to 'category' for better compatibility
+                            type: 'category',
                             grid: {
                                 color: '#4b5563'
                             },
@@ -77,8 +93,8 @@ class TradingDashboard {
                                     return '$' + value.toFixed(2);
                                 }
                             },
-                            suggestedMin: -1,
-                            suggestedMax: 1
+                            min: -1,
+                            max: 1
                         }
                     },
                     plugins: {
@@ -90,6 +106,8 @@ class TradingDashboard {
                     }
                 }
             });
+            
+            console.log('✅ Performance chart created successfully');
 
             // Portfolio Chart
         const portfolioCtx = document.getElementById('portfolioChart').getContext('2d');
@@ -126,8 +144,28 @@ class TradingDashboard {
         });
 
         console.log('✅ Charts initialized successfully');
+        
+        // Force immediate chart update to ensure visibility
+        setTimeout(() => {
+            console.log('🔄 Forcing chart update...');
+            if (this.charts.performance) {
+                this.charts.performance.update('none');
+            }
+            if (this.charts.portfolio) {
+                this.charts.portfolio.update('none');
+            }
+        }, 100);
+        
         } catch (error) {
             console.error('❌ Error initializing charts:', error);
+            // Add visible error indication
+            const performanceCanvas = document.getElementById('performanceChart');
+            if (performanceCanvas) {
+                const ctx = performanceCanvas.getContext('2d');
+                ctx.fillStyle = '#ef4444';
+                ctx.font = '16px Arial';
+                ctx.fillText('Chart Error - Check Console', 10, 30);
+            }
         }
     }
 
