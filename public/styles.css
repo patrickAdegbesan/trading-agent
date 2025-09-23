@@ -187,12 +187,25 @@ body {
     padding: 1.5rem;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow);
-    min-height: 300px;
+    height: 350px; /* Fixed height */
+    max-height: 350px; /* Prevent growing */
+    overflow: hidden; /* Hide any overflow */
+    position: relative; /* For canvas positioning */
 }
 
 .chart-container canvas {
-    min-height: 200px !important;
-    height: 200px;
+    max-height: 250px !important;
+    height: 250px !important;
+    width: 100% !important;
+    position: relative;
+}
+
+.chart-wrapper {
+    height: 250px;
+    max-height: 250px;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
 }
 
 .chart-header {
