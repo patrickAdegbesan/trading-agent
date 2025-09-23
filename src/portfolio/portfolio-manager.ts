@@ -11,10 +11,12 @@ export class PortfolioManager extends EventEmitter {
     private positions: Map<string, Position> = new Map();
     private cash: number = 0;
     private lastMetricsUpdate: number = 0;
+    private dataCollector?: any;
 
-    constructor(initialCash: number = 10000) {
+    constructor(initialCash: number = 10000, dataCollector?: any) {
         super();
         this.cash = initialCash;
+        this.dataCollector = dataCollector;
     }
 
     /**
@@ -27,6 +29,20 @@ export class PortfolioManager extends EventEmitter {
                 Array.from(this.positions.entries()).map(([symbol, pos]) => [symbol, pos.quantity])
             )
         };
+    }
+
+    /**
+     * Set data collector for real-time pricing
+     */
+    public setDataCollector(dataCollector: any): void {
+        this.dataCollector = dataCollector;
+    }
+
+    /**
+     * Update cash balance (for trades)
+     */
+    public updateBalance(amount: number): void {
+        this.cash += amount;
     }
 
     /**
@@ -154,8 +170,22 @@ export class PortfolioManager extends EventEmitter {
      * Get current market price for a symbol
      */
     private async getPrice(symbol: string): Promise<number> {
-        // TODO: Implement actual price fetching from exchange
-        // For now, return a mock price
-        return 100;
+        // Try to get real-time price from data collector
+        if (this.dataCollector && this.dataCollector.getCurrentPrice) {
+            const price = this.dataCollector.getCurrentPrice(symbol);
+            if (price && price > 0) {
+                return price;
+            }
+        }
+        
+        // Fallback to realistic mock prices based on actual market values
+        const mockPrices: { [key: string]: number } = {
+            'BTCUSDT': 112980.94,
+            'ETHUSDT': 4174.69,
+            'ADAUSDT': 0.8232,
+            'SOLUSDT': 219.6
+        };
+        
+        return mockPrices[symbol] || 100;
     }
 }
