@@ -245,10 +245,28 @@ class TradingDashboard {
             
             if (data.chartData && data.chartData.length > 0) {
                 const chart = this.charts.performance;
+                
+                // Process timestamps - handle both string ISO dates and numeric timestamps
                 const labels = data.chartData.map(d => {
-                    const date = new Date(d.timestamp);
-                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    let date;
+                    if (typeof d.timestamp === 'string') {
+                        date = new Date(d.timestamp);
+                    } else {
+                        date = new Date(d.timestamp); // numeric timestamp
+                    }
+                    
+                    // Format to show just time for recent data, or date + time for older data
+                    const now = new Date();
+                    const isToday = date.toDateString() === now.toDateString();
+                    
+                    if (isToday) {
+                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    } else {
+                        return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+                               date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }
                 });
+                
                 const pnlData = data.chartData.map(d => d.cumulativePnL || 0);
                 
                 console.log('Chart labels sample:', labels.slice(0, 3));
@@ -258,12 +276,21 @@ class TradingDashboard {
                 chart.data.labels = labels;
                 chart.data.datasets[0].data = pnlData;
                 
-                // Ensure chart is visible even with small values
-                const dataRange = Math.max(...pnlData) - Math.min(...pnlData);
-                if (dataRange < 0.1) {
-                    // If data is very flat, adjust the y-axis to make it visible
-                    chart.options.scales.y.min = Math.min(...pnlData) - 0.5;
-                    chart.options.scales.y.max = Math.max(...pnlData) + 0.5;
+                // Always set appropriate y-axis range for small values
+                const minVal = Math.min(...pnlData);
+                const maxVal = Math.max(...pnlData);
+                const dataRange = maxVal - minVal;
+                
+                if (dataRange < 2) {
+                    // For small values, set a fixed range to make the line visible
+                    const center = (minVal + maxVal) / 2;
+                    chart.options.scales.y.min = center - 1;
+                    chart.options.scales.y.max = center + 1;
+                } else {
+                    // For larger ranges, add 10% padding
+                    const padding = dataRange * 0.1;
+                    chart.options.scales.y.min = minVal - padding;
+                    chart.options.scales.y.max = maxVal + padding;
                 }
                 
                 chart.update('none');
@@ -271,11 +298,20 @@ class TradingDashboard {
                 console.log('Chart updated successfully');
             } else {
                 console.warn('No chart data available');
-                // Show a message in the chart area
+                // Show a visible baseline when no data is available
                 const chart = this.charts.performance;
-                chart.data.labels = ['No Data'];
+                const now = new Date();
+                chart.data.labels = [
+                    now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                ];
                 chart.data.datasets[0].data = [0];
+                
+                // Set visible y-axis range
+                chart.options.scales.y.min = -0.5;
+                chart.options.scales.y.max = 0.5;
+                
                 chart.update('none');
+                console.log('Chart set to "No Data" baseline');
             }
             
         } catch (error) {
