@@ -530,6 +530,11 @@ export class DashboardServer {
     }
 
     private formatPerformanceChartData(performance: any[]): any[] {
+        // If we have very little performance data, generate a baseline timeline
+        if (performance.length < 10) {
+            return this.generateBaselineChartData(performance);
+        }
+        
         let cumulativePnL = 0;
         return performance.map((p: any) => {
             cumulativePnL += p.totalPnL || 0;
@@ -540,6 +545,41 @@ export class DashboardServer {
                 winRate: p.winRate || 0
             };
         });
+    }
+
+    private generateBaselineChartData(performance: any[]): any[] {
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const sevenDaysAgo = now - (7 * oneDayMs);
+        
+        // Generate hourly data points for the last 7 days
+        const chartData = [];
+        for (let i = 0; i < 168; i += 4) { // Every 4 hours for 7 days
+            const timestamp = sevenDaysAgo + (i * 60 * 60 * 1000);
+            chartData.push({
+                timestamp,
+                pnl: 0,
+                cumulativePnL: 0,
+                winRate: 0
+            });
+        }
+        
+        // If we have any real performance data, append it
+        if (performance.length > 0) {
+            let cumulativePnL = 0;
+            performance.forEach((p: any) => {
+                cumulativePnL += p.totalPnL || 0;
+                chartData.push({
+                    timestamp: p.timestamp,
+                    pnl: p.totalPnL || 0,
+                    cumulativePnL,
+                    winRate: p.winRate || 0
+                });
+            });
+        }
+        
+        // Sort by timestamp and return
+        return chartData.sort((a, b) => a.timestamp - b.timestamp);
     }
 
     private calculateMaxDrawdown(performance: any[]): number {
