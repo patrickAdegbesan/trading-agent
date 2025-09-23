@@ -115,18 +115,54 @@ export class MovingAverageCrossoverStrategy extends BaseStrategy {
   }
 
   private calculateConfidence(crossoverStrength: number, rsi: number, side: string): number {
-    // TEMPORARY FIX: Return fixed confidence to test system
-    // TODO: Debug why calculation returns NaN
     console.log(`calculateConfidence inputs: crossoverStrength=${crossoverStrength}, rsi=${rsi}, side=${side}`);
     
     // Validate inputs - prevent NaN propagation
     if (!isFinite(crossoverStrength) || !isFinite(rsi)) {
       console.warn(`Invalid inputs for confidence calculation: crossoverStrength=${crossoverStrength}, rsi=${rsi}`);
-      return 0.65; // Fixed confidence for testing
+      return 0.55; // Conservative fallback for invalid inputs
     }
 
-    // TEMPORARY: Use simplified calculation
-    return 0.75; // Fixed confidence for testing
+    // Dynamic confidence calculation based on crossover strength and RSI
+    let confidence = 0;
+
+    // Base confidence from crossover strength (0.4 to 0.7)
+    const strengthComponent = Math.min(0.7, 0.4 + (Math.abs(crossoverStrength) * 10));
+    
+    // RSI component - reward middle zones, penalize extremes
+    let rsiComponent = 0.5;
+    if (side === 'BUY') {
+      // For buy signals, prefer RSI in 40-60 range (not oversold, not overbought)
+      if (rsi >= 40 && rsi <= 60) {
+        rsiComponent = 0.8;
+      } else if (rsi >= 30 && rsi < 40) {
+        rsiComponent = 0.7; // Slightly oversold is okay
+      } else if (rsi > 60 && rsi <= 70) {
+        rsiComponent = 0.6; // Getting overbought
+      } else {
+        rsiComponent = 0.4; // Extreme zones
+      }
+    } else if (side === 'SELL') {
+      // For sell signals, prefer RSI in 40-60 range
+      if (rsi >= 40 && rsi <= 60) {
+        rsiComponent = 0.8;
+      } else if (rsi > 60 && rsi <= 70) {
+        rsiComponent = 0.7; // Slightly overbought is okay
+      } else if (rsi >= 30 && rsi < 40) {
+        rsiComponent = 0.6; // Getting oversold
+      } else {
+        rsiComponent = 0.4; // Extreme zones
+      }
+    }
+
+    // Combine components with weights
+    confidence = (strengthComponent * 0.6) + (rsiComponent * 0.4);
+    
+    // Ensure confidence is within bounds
+    confidence = Math.max(0.3, Math.min(0.9, confidence));
+    
+    console.log(`Calculated confidence: ${confidence} (strength: ${strengthComponent}, rsi: ${rsiComponent})`);
+    return confidence;
 
     // Original calculation (commented out for debugging)
     /*

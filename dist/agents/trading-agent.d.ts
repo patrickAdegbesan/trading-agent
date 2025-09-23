@@ -49,4 +49,10 @@ export declare class TradingAgent extends EventEmitter {
      * Stop the trading agent gracefully
      */
     stop(): Promise<void>;
+    /**
+     * Get the latest ML predictions for dashboard display
+     */
+    getLatestPredictions(): {
+        [symbol: string]: any;
+    };
 }

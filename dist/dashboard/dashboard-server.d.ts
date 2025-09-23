@@ -33,6 +33,7 @@ export declare class DashboardServer {
     private calculateTradePnL;
     private calculateTradeDuration;
     private formatPerformanceChartData;
+    private generateBaselineChartData;
     private calculateMaxDrawdown;
     updateStats(newStats: any): void;
     start(port?: number): Promise<void>;

@@ -6,11 +6,20 @@ export declare class PortfolioManager extends EventEmitter {
     private positions;
     private cash;
     private lastMetricsUpdate;
-    constructor(initialCash?: number);
+    private dataCollector?;
+    constructor(initialCash?: number, dataCollector?: any);
     /**
      * Get current portfolio status
      */
     getPortfolio(): Promise<Portfolio>;
+    /**
+     * Set data collector for real-time pricing
+     */
+    setDataCollector(dataCollector: any): void;
+    /**
+     * Update cash balance (for trades)
+     */
+    updateBalance(amount: number): void;
     /**
      * Update portfolio after trade execution
      */

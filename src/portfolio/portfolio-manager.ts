@@ -180,12 +180,19 @@ export class PortfolioManager extends EventEmitter {
         
         // Fallback to realistic mock prices based on actual market values
         const mockPrices: { [key: string]: number } = {
-            'BTCUSDT': 112980.94,
-            'ETHUSDT': 4174.69,
-            'ADAUSDT': 0.8232,
-            'SOLUSDT': 219.6
+            'BTCUSDT': 96800.00,
+            'ETHUSDT': 3687.45,
+            'ADAUSDT': 1.0523,
+            'SOLUSDT': 245.25
         };
         
-        return mockPrices[symbol] || 100;
+        // More intelligent fallback based on symbol pattern
+        if (symbol.includes('BTC')) return mockPrices['BTCUSDT'] || 96800.00;
+        if (symbol.includes('ETH')) return mockPrices['ETHUSDT'] || 3687.45;
+        if (symbol.includes('ADA')) return mockPrices['ADAUSDT'] || 1.0523;
+        if (symbol.includes('SOL')) return mockPrices['SOLUSDT'] || 245.25;
+        
+        // Generic fallback for unknown tokens
+        return mockPrices[symbol] || 50.00;
     }
 }

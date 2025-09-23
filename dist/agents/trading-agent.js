@@ -300,6 +300,23 @@ class TradingAgent extends events_1.EventEmitter {
         console.log('Stopping trading agent...');
         this.isActive = false;
     }
+    /**
+     * Get the latest ML predictions for dashboard display
+     */
+    getLatestPredictions() {
+        const predictions = {};
+        for (const [symbol, signalData] of this.lastSignalCache) {
+            predictions[symbol] = {
+                side: signalData.signal.side,
+                confidence: signalData.signal.confidence,
+                timestamp: signalData.timestamp,
+                price: signalData.price,
+                winProbability: signalData.signal.winProbability,
+                expectedReturn: signalData.signal.expectedReturn
+            };
+        }
+        return predictions;
+    }
 }
 exports.TradingAgent = TradingAgent;
 //# sourceMappingURL=trading-agent.js.map
