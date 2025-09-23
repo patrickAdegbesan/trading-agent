@@ -355,4 +355,24 @@ export class TradingAgent extends EventEmitter {
         console.log('Stopping trading agent...');
         this.isActive = false;
     }
+
+    /**
+     * Get the latest ML predictions for dashboard display
+     */
+    public getLatestPredictions(): { [symbol: string]: any } {
+        const predictions: { [symbol: string]: any } = {};
+        
+        for (const [symbol, signalData] of this.lastSignalCache) {
+            predictions[symbol] = {
+                side: signalData.signal.side,
+                confidence: signalData.signal.confidence,
+                timestamp: signalData.timestamp,
+                price: signalData.price,
+                winProbability: signalData.signal.winProbability,
+                expectedReturn: signalData.signal.expectedReturn
+            };
+        }
+        
+        return predictions;
+    }
 }
