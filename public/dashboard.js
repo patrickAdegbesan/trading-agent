@@ -34,61 +34,64 @@ class TradingDashboard {
     }
 
     initializeCharts() {
-        // Performance Chart
-        const performanceCtx = document.getElementById('performanceChart').getContext('2d');
-        this.charts.performance = new Chart(performanceCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Cumulative P&L',
-                    data: [],
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: {
-                            unit: 'hour'
+        try {
+            // Performance Chart
+            const performanceCtx = document.getElementById('performanceChart').getContext('2d');
+            console.log('Initializing performance chart...');
+            
+            this.charts.performance = new Chart(performanceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Cumulative P&L',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'category', // Change from 'time' to 'category' for better compatibility
+                            grid: {
+                                color: '#4b5563'
+                            },
+                            ticks: {
+                                color: '#d1d5db',
+                                maxTicksLimit: 10
+                            }
                         },
-                        grid: {
-                            color: '#4b5563'
-                        },
-                        ticks: {
-                            color: '#d1d5db'
+                        y: {
+                            grid: {
+                                color: '#4b5563'
+                            },
+                            ticks: {
+                                color: '#d1d5db',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            },
+                            suggestedMin: -1,
+                            suggestedMax: 1
                         }
                     },
-                    y: {
-                        grid: {
-                            color: '#4b5563'
-                        },
-                        ticks: {
-                            color: '#d1d5db',
-                            callback: function(value) {
-                                return '$' + value.toFixed(2);
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#d1d5db'
                             }
                         }
                     }
-                },
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: '#d1d5db'
-                        }
-                    }
                 }
-            }
-        });
+            });
 
-        // Portfolio Chart
+            // Portfolio Chart
         const portfolioCtx = document.getElementById('portfolioChart').getContext('2d');
         this.charts.portfolio = new Chart(portfolioCtx, {
             type: 'doughnut',
@@ -121,6 +124,11 @@ class TradingDashboard {
                 }
             }
         });
+
+        console.log('✅ Charts initialized successfully');
+        } catch (error) {
+            console.error('❌ Error initializing charts:', error);
+        }
     }
 
     async loadAllData() {
@@ -232,10 +240,41 @@ class TradingDashboard {
             const response = await fetch('/api/performance?days=7');
             const data = await response.json();
             
+            console.log('Performance data received:', data);
+            console.log('Chart data length:', data.chartData?.length);
+            
             if (data.chartData && data.chartData.length > 0) {
                 const chart = this.charts.performance;
-                chart.data.labels = data.chartData.map(d => new Date(d.timestamp));
-                chart.data.datasets[0].data = data.chartData.map(d => d.cumulativePnL);
+                const labels = data.chartData.map(d => {
+                    const date = new Date(d.timestamp);
+                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                });
+                const pnlData = data.chartData.map(d => d.cumulativePnL || 0);
+                
+                console.log('Chart labels sample:', labels.slice(0, 3));
+                console.log('Chart data sample:', pnlData.slice(0, 3));
+                console.log('Chart data min/max:', Math.min(...pnlData), Math.max(...pnlData));
+                
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = pnlData;
+                
+                // Ensure chart is visible even with small values
+                const dataRange = Math.max(...pnlData) - Math.min(...pnlData);
+                if (dataRange < 0.1) {
+                    // If data is very flat, adjust the y-axis to make it visible
+                    chart.options.scales.y.min = Math.min(...pnlData) - 0.5;
+                    chart.options.scales.y.max = Math.max(...pnlData) + 0.5;
+                }
+                
+                chart.update('none');
+                
+                console.log('Chart updated successfully');
+            } else {
+                console.warn('No chart data available');
+                // Show a message in the chart area
+                const chart = this.charts.performance;
+                chart.data.labels = ['No Data'];
+                chart.data.datasets[0].data = [0];
                 chart.update('none');
             }
             
