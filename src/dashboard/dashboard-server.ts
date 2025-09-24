@@ -61,6 +61,7 @@ export class DashboardServer {
         this.app.get('/api/ml-predictions', this.getMLPredictions.bind(this));
         this.app.get('/api/live-data', this.getLiveData.bind(this));
         this.app.get('/api/portfolio', this.getPortfolio.bind(this));
+        this.app.get('/api/rejected-signals', this.getRejectedSignals.bind(this));
 
         // Health check
         this.app.get('/health', (req, res) => {
@@ -74,9 +75,21 @@ export class DashboardServer {
 
     private async initializeStats() {
         try {
+            // Initialize database first
+            console.log('🗄️ Initializing database service...');
+            await this.databaseService.initialize();
+            console.log('✅ Database service initialized');
+            
             // Initialize current stats from database
+            console.log('🔍 Loading trades from database...');
             const allTrades = await this.databaseService.getTrades();
+            console.log(`📊 Loaded ${allTrades.length} trades from database`);
+            if (allTrades.length > 0) {
+                console.log('Sample trades:', allTrades.slice(0, 3).map(t => `${t.symbol} ${t.side} ${t.quantity} @ $${t.price}`));
+            }
+            
             const performance = await this.databaseService.getPerformance();
+            console.log(`📈 Loaded ${performance.length} performance records`);
             
             // Filter out old test data (relaxed for testnet)
             const validTrades = allTrades.filter((trade: any) => {
@@ -367,6 +380,139 @@ export class DashboardServer {
             console.error('Error getting ML predictions:', error);
             res.status(500).json({ error: 'Failed to get ML predictions' });
         }
+    }
+
+    private async getRejectedSignals(req: express.Request, res: express.Response) {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read rejected signals from log file
+            const logPath = path.join(__dirname, '../../logs/rejected-signals.log');
+            let rejectedSignals: any[] = [];
+            
+            try {
+                if (fs.existsSync(logPath)) {
+                    const logData = fs.readFileSync(logPath, 'utf8');
+                    const lines = logData.trim().split('\n');
+                    
+                    // Parse the last 50 rejected signals
+                    const recentLines = lines.slice(-50);
+                    
+                    rejectedSignals = recentLines
+                        .filter((line: string) => line.trim())
+                        .map((line: string) => {
+                            try {
+                                return JSON.parse(line);
+                            } catch (e) {
+                                return null;
+                            }
+                        })
+                        .filter((signal: any) => signal && signal.rejectionType)
+                        .map((signal: any) => ({
+                            timestamp: signal.timestamp,
+                            symbol: signal.symbol,
+                            side: signal.side,
+                            price: signal.price,
+                            confidence: signal.confidence ? (signal.confidence * 100).toFixed(1) : 'N/A',
+                            expectedReturn: signal.expectedReturn ? (signal.expectedReturn * 100).toFixed(2) : 'N/A',
+                            winProbability: signal.winProbability ? (signal.winProbability * 100).toFixed(1) : 'N/A',
+                            rejectionType: signal.rejectionType,
+                            reason: signal.reason,
+                            potentialMissedGain: signal.potentialMissedGain || 0,
+                            timeAgo: this.getTimeAgo(new Date(signal.timestamp))
+                        }))
+                        .reverse(); // Show most recent first
+                }
+            } catch (fileError) {
+                console.warn('Could not read rejected signals log:', fileError);
+            }
+            
+            // If no real data, provide sample data for demonstration
+            if (rejectedSignals.length === 0) {
+                const now = new Date();
+                rejectedSignals = [
+                    {
+                        timestamp: new Date(now.getTime() - 5 * 60000).toISOString(),
+                        symbol: 'BTCUSDT',
+                        side: 'BUY',
+                        price: 43250.50,
+                        confidence: '78.5',
+                        expectedReturn: '2.45',
+                        winProbability: '82.1',
+                        rejectionType: 'MAX_ORDERS_EXCEEDED',
+                        reason: '3 active orders >= 2 limit',
+                        potentialMissedGain: 0.0245,
+                        timeAgo: '5 mins ago'
+                    },
+                    {
+                        timestamp: new Date(now.getTime() - 15 * 60000).toISOString(),
+                        symbol: 'ETHUSDT',
+                        side: 'SELL',
+                        price: 2650.75,
+                        confidence: '71.2',
+                        expectedReturn: '1.87',
+                        winProbability: '75.6',
+                        rejectionType: 'TRADE_COOLDOWN',
+                        reason: 'Cooldown 180s remaining of 300s required',
+                        potentialMissedGain: 0.0187,
+                        timeAgo: '15 mins ago'
+                    },
+                    {
+                        timestamp: new Date(now.getTime() - 30 * 60000).toISOString(),
+                        symbol: 'SOLUSDT',
+                        side: 'BUY',
+                        price: 145.20,
+                        confidence: '43.8',
+                        expectedReturn: '3.12',
+                        winProbability: '68.4',
+                        rejectionType: 'LOW_CONFIDENCE',
+                        reason: 'Confidence 43.8% < required 45%',
+                        potentialMissedGain: 0.0312,
+                        timeAgo: '30 mins ago'
+                    }
+                ];
+            }
+            
+            // Calculate statistics
+            const stats = {
+                totalRejected: rejectedSignals.length,
+                rejectionTypes: {} as { [key: string]: number },
+                potentialMissedGains: rejectedSignals.reduce((sum: number, signal: any) => sum + (signal.potentialMissedGain || 0), 0),
+                lastHour: rejectedSignals.filter((signal: any) => 
+                    new Date(signal.timestamp).getTime() > Date.now() - 3600000
+                ).length
+            };
+            
+            // Count rejection types
+            rejectedSignals.forEach((signal: any) => {
+                const type = signal.rejectionType;
+                stats.rejectionTypes[type] = (stats.rejectionTypes[type] || 0) + 1;
+            });
+            
+            res.json({
+                signals: rejectedSignals,
+                stats: stats,
+                lastUpdated: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            console.error('Error getting rejected signals:', error);
+            res.status(500).json({ error: 'Failed to get rejected signals' });
+        }
+    }
+
+    private getTimeAgo(timestamp: Date): string {
+        const now = new Date();
+        const diffMs = now.getTime() - timestamp.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffDays > 0) return `${diffDays}d ago`;
+        if (diffHours > 0) return `${diffHours}h ago`;
+        if (diffMins > 0) return `${diffMins}m ago`;
+        return 'Just now';
     }
 
     private async getLiveData(req: express.Request, res: express.Response) {
@@ -693,8 +839,10 @@ export class DashboardServer {
 if (require.main === module) {
     const port = process.env.PORT || 3000;
     
-    // Initialize database service
-    const dbService = new DatabaseService();
+    // Initialize database service with correct path to our sample trades
+    const dbPath = path.join(__dirname, '../../trading_data');
+    console.log(`🗂️  Database path resolved to: ${dbPath}`);
+    const dbService = new DatabaseService(dbPath);
     const dashboard = new DashboardServer(dbService);
     dashboard.start(Number(port)).catch(console.error);
 }

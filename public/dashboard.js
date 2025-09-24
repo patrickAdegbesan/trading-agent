@@ -190,7 +190,8 @@ class TradingDashboard {
                 this.updatePerformance(),
                 this.updateMLPredictions(),
                 this.updateLiveData(),
-                this.updatePortfolio()
+                this.updatePortfolio(),
+                this.updateRejectedSignals()
             ]);
             
             this.lastDataUpdate = new Date();
@@ -478,6 +479,82 @@ class TradingDashboard {
         }
     }
 
+    async updateRejectedSignals() {
+        try {
+            const response = await fetch('/api/rejected-signals');
+            const data = await response.json();
+            
+            // Update statistics
+            document.getElementById('total-rejected').textContent = data.stats.totalRejected;
+            document.getElementById('hourly-rejected').textContent = data.stats.lastHour;
+            document.getElementById('missed-gains').textContent = (data.stats.potentialMissedGains * 100).toFixed(2);
+            
+            // Update rejection types grid
+            const rejectionTypesGrid = document.getElementById('rejection-types-grid');
+            rejectionTypesGrid.innerHTML = '';
+            
+            const rejectionTypeNames = {
+                'DUPLICATE_SIGNAL': '🔄 Duplicate',
+                'LOW_CONFIDENCE': '📉 Low Confidence',
+                'MAX_ORDERS_EXCEEDED': '⚠️ Too Many Orders',
+                'TRADE_COOLDOWN': '⏰ Cooldown',
+                'RISK_MANAGER_DENIAL': '🚫 Risk Blocked',
+                'INVALID_POSITION_SIZE': '💰 Invalid Size',
+                'CLOSE_NOT_IMPLEMENTED': '🔒 Close N/A'
+            };
+            
+            Object.entries(data.stats.rejectionTypes).forEach(([type, count]) => {
+                const typeElement = document.createElement('div');
+                typeElement.className = 'rejection-type-item';
+                typeElement.innerHTML = `
+                    <div class="rejection-type-name">${rejectionTypeNames[type] || type}</div>
+                    <div class="rejection-type-count">${count}</div>
+                `;
+                rejectionTypesGrid.appendChild(typeElement);
+            });
+            
+            // Update rejected signals table
+            const tbody = document.getElementById('rejected-signals-tbody');
+            tbody.innerHTML = '';
+            
+            data.signals.forEach(signal => {
+                const row = document.createElement('tr');
+                const sideClass = signal.side === 'BUY' ? 'buy' : 'sell';
+                const confidenceClass = parseFloat(signal.confidence) >= 70 ? 'high-confidence' : 
+                                       parseFloat(signal.confidence) >= 50 ? 'medium-confidence' : 'low-confidence';
+                
+                row.innerHTML = `
+                    <td class="time-cell">${signal.timeAgo}</td>
+                    <td class="symbol-cell">${signal.symbol}</td>
+                    <td class="side-cell ${sideClass}">${signal.side}</td>
+                    <td class="price-cell">$${parseFloat(signal.price).toLocaleString()}</td>
+                    <td class="confidence-cell ${confidenceClass}">${signal.confidence}%</td>
+                    <td class="return-cell">${signal.expectedReturn}%</td>
+                    <td class="reason-cell" title="${signal.reason}">${this.getRejectionTypeDisplay(signal.rejectionType)}</td>
+                    <td class="gain-cell">${(signal.potentialMissedGain * 100).toFixed(2)}%</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+        } catch (error) {
+            console.error('Error updating rejected signals:', error);
+        }
+    }
+
+    getRejectionTypeDisplay(type) {
+        const displays = {
+            'DUPLICATE_SIGNAL': '🔄 Duplicate',
+            'LOW_CONFIDENCE': '📉 Low Conf.',
+            'MAX_ORDERS_EXCEEDED': '⚠️ Max Orders',
+            'TRADE_COOLDOWN': '⏰ Cooldown',
+            'RISK_MANAGER_DENIAL': '🚫 Risk Block',
+            'INVALID_POSITION_SIZE': '💰 Invalid Size',
+            'CLOSE_NOT_IMPLEMENTED': '🔒 Not Impl.'
+        };
+        return displays[type] || type;
+    }
+
     startPeriodicUpdates() {
         // Update every 5 seconds
         this.updateInterval = setInterval(() => {
@@ -507,6 +584,7 @@ class TradingDashboard {
         
         // Refresh functions
         window.refreshTrades = () => this.updateTrades();
+        window.refreshRejectedSignals = () => this.updateRejectedSignals();
         window.refreshAllData = () => this.loadAllData();
         
         // Keyboard shortcuts

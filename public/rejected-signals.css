@@ -1,0 +1,175 @@
+/* Rejected Signals Styles */
+.rejected-signals-row {
+    margin-bottom: 2rem;
+}
+
+.rejected-signals-container {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.rejected-stats {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.stat-item i {
+    color: var(--warning-color);
+}
+
+.rejected-signals-content {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+}
+
+.rejection-types-summary h4 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.rejection-types-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.rejection-type-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--darker-bg);
+    border-radius: 8px;
+    border-left: 3px solid var(--warning-color);
+}
+
+.rejection-type-name {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.rejection-type-count {
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--warning-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+.rejected-signals-table {
+    overflow-x: auto;
+}
+
+.rejected-signals-table table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--darker-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.rejected-signals-table th {
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.rejected-signals-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.rejected-signals-table tbody tr:hover {
+    background: var(--card-bg);
+}
+
+.side-cell.buy {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.side-cell.sell {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.confidence-cell.high-confidence {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.confidence-cell.medium-confidence {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+.confidence-cell.low-confidence {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.reason-cell {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.gain-cell {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+.time-cell {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Mobile responsive */
+@media (max-width: 1024px) {
+    .rejected-signals-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .rejected-stats {
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .rejected-signals-table {
+        font-size: 0.8rem;
+    }
+    
+    .rejected-signals-container {
+        padding: 1rem;
+    }
+    
+    .rejection-types-grid {
+        gap: 0.5rem;
+    }
+}
