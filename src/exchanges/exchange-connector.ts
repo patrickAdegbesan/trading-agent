@@ -419,6 +419,46 @@ export class ExchangeConnector extends EventEmitter {
     this.wsConnections.set(streamName, ws);
   }
 
+  /**
+   * Get order status from exchange
+   */
+  async getOrder(symbol: string, orderId: string | number): Promise<any> {
+    try {
+      this.checkRateLimit();
+      
+      const order = await this.client.getOrder({
+        symbol: symbol,
+        orderId: orderId.toString()
+      });
+      
+      this.logger.info(`Order status retrieved: ${symbol} ${orderId}`, {
+        status: order.status,
+        executedQty: order.executedQty,
+        price: order.price
+      });
+      
+      return {
+        orderId: order.orderId,
+        symbol: order.symbol,
+        status: order.status,
+        side: order.side,
+        type: order.type,
+        quantity: order.origQty,
+        executedQty: order.executedQty,
+        price: order.price,
+        stopPrice: order.stopPrice,
+        time: order.time,
+        updateTime: order.updateTime
+      };
+      
+    } catch (error: any) {
+      this.logger.error(`Failed to get order ${orderId} for ${symbol}`, { 
+        error: error.message 
+      });
+      throw error;
+    }
+  }
+
   private checkRateLimit(): void {
     const now = Date.now();
     

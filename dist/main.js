@@ -211,6 +211,10 @@ async function main() {
                         }
                     }
                 }
+                // Check and update order status every few loops
+                if (Math.random() < 0.3) { // ~30% chance to check orders
+                    await checkAndUpdateOrderStatus(orderManager, portfolioManager, exchangeConnector);
+                }
                 // Print enhanced statistics every 10 loops
                 if (Math.random() < 0.1) { // ~10% chance
                     const stats = orderManager.getTradingStats();
@@ -295,6 +299,55 @@ function setupDatabaseIntegration(databaseService, tradingAgent, dataCollector, 
             winRate: `${(stats.winRate * 100).toFixed(1)}%`
         });
     }, 300000); // Every 5 minutes
+}
+/**
+ * Check and update order status for pending orders
+ */
+async function checkAndUpdateOrderStatus(orderManager, portfolioManager, exchangeConnector) {
+    try {
+        const activeOrders = orderManager.getActiveOrders();
+        for (const order of activeOrders) {
+            if (order.status === 'SUBMITTED' && order.exchangeOrderId) {
+                try {
+                    // Check order status with exchange
+                    const exchangeOrder = await exchangeConnector.getOrder(order.symbol, order.exchangeOrderId);
+                    if (exchangeOrder && exchangeOrder.status === 'FILLED') {
+                        console.log(`✅ Order filled: ${order.symbol} ${order.side} ${order.quantity} @ ${exchangeOrder.price || order.price}`);
+                        // Update order status
+                        order.status = 'FILLED';
+                        order.executedPrice = exchangeOrder.price || order.price;
+                        order.executedQuantity = exchangeOrder.executedQty || order.quantity;
+                        // Update portfolio with filled position
+                        const tradeQuantity = order.side === 'BUY' ? order.quantity : -order.quantity;
+                        await portfolioManager.updateAfterTrade({
+                            symbol: order.symbol,
+                            quantity: tradeQuantity,
+                            price: order.executedPrice,
+                            timestamp: Date.now()
+                        });
+                        console.log(`📊 Portfolio updated for ${order.symbol}: ${tradeQuantity > 0 ? 'Added' : 'Reduced'} ${Math.abs(tradeQuantity)} units`);
+                        // Emit trade event for database recording
+                        orderManager.emit('tradeExecuted', {
+                            success: true,
+                            orderId: order.id,
+                            symbol: order.symbol,
+                            side: order.side,
+                            quantity: order.executedQuantity,
+                            executedPrice: order.executedPrice,
+                            timestamp: Date.now(),
+                            status: 'FILLED'
+                        });
+                    }
+                }
+                catch (error) {
+                    console.warn(`⚠️ Error checking order status for ${order.id}:`, error.message);
+                }
+            }
+        }
+    }
+    catch (error) {
+        console.error('❌ Error in order status monitoring:', error.message);
+    }
 }
 // Handle graceful shutdown
 process.on('SIGINT', () => {

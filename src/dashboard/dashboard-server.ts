@@ -436,25 +436,37 @@ export class DashboardServer {
                     // Calculate total value
                     let totalValue = portfolioData.totalValue || cash;
                     
-                    // Process positions
+                    // Process positions - get actual position objects with PnL
                     const portfolioPositions = [];
                     const allocation: any = { Cash: cash };
                     
-                    for (const [symbol, quantity] of Object.entries(portfolioData.positions)) {
-                        if (quantity > 0) {
-                            const currentPrice = this.dataCollector?.getCurrentPrice(symbol) || 0;
-                            const value = quantity * currentPrice;
-                            // For PnL calculation, we'd need entry price from position data
-                            const pnl = 0; // TODO: Get actual PnL from position tracking
+                    // Get actual position objects from portfolio manager
+                    const positions = this.portfolioManager.getPositions();
+                    
+                    for (const position of positions) {
+                        if (position.quantity !== 0) {
+                            const currentPrice = await this.portfolioManager.getCurrentPrice(position.symbol);
+                            const value = Math.abs(position.quantity) * currentPrice;
+                            
+                            // Calculate PnL
+                            const pnl = position.quantity > 0 
+                                ? (currentPrice - position.entryPrice) * position.quantity
+                                : (position.entryPrice - currentPrice) * Math.abs(position.quantity);
                             
                             portfolioPositions.push({
-                                symbol: symbol,
-                                quantity: quantity,
+                                symbol: position.symbol,
+                                quantity: position.quantity,
+                                entryPrice: position.entryPrice,
+                                currentPrice: currentPrice,
                                 value: parseFloat(value.toFixed(2)),
-                                pnl: parseFloat(pnl.toFixed(2))
+                                pnl: parseFloat(pnl.toFixed(2)),
+                                pnlPercent: parseFloat(((pnl / (position.entryPrice * Math.abs(position.quantity))) * 100).toFixed(2)),
+                                side: position.quantity > 0 ? 'LONG' : 'SHORT',
+                                timestamp: position.timestamp
                             });
                             
-                            const baseAsset = symbol.replace('USDT', '');
+                            // Calculate allocation
+                            const baseAsset = position.symbol.replace('USDT', '');
                             allocation[baseAsset] = parseFloat(((value / totalValue) * 100).toFixed(1));
                         }
                     }

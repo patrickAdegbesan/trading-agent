@@ -61,6 +61,10 @@ export declare class ExchangeConnector extends EventEmitter {
     subscribeToTicker(symbol: string): void;
     subscribeToKlines(symbol: string, interval: string): void;
     private subscribeToStream;
+    /**
+     * Get order status from exchange
+     */
+    getOrder(symbol: string, orderId: string | number): Promise<any>;
     private checkRateLimit;
     healthCheck(): Promise<{
         status: string;

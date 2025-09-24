@@ -46,6 +46,14 @@ export declare class PortfolioManager extends EventEmitter {
      */
     getTotalValue(): Promise<number>;
     /**
+     * Get all positions
+     */
+    getPositions(): Position[];
+    /**
+     * Get current price for a symbol (public version)
+     */
+    getCurrentPrice(symbol: string): Promise<number>;
+    /**
      * Close a specific position
      */
     private closePosition;

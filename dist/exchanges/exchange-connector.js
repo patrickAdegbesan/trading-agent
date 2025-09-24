@@ -337,6 +337,42 @@ class ExchangeConnector extends events_1.EventEmitter {
         });
         this.wsConnections.set(streamName, ws);
     }
+    /**
+     * Get order status from exchange
+     */
+    async getOrder(symbol, orderId) {
+        try {
+            this.checkRateLimit();
+            const order = await this.client.getOrder({
+                symbol: symbol,
+                orderId: orderId.toString()
+            });
+            this.logger.info(`Order status retrieved: ${symbol} ${orderId}`, {
+                status: order.status,
+                executedQty: order.executedQty,
+                price: order.price
+            });
+            return {
+                orderId: order.orderId,
+                symbol: order.symbol,
+                status: order.status,
+                side: order.side,
+                type: order.type,
+                quantity: order.origQty,
+                executedQty: order.executedQty,
+                price: order.price,
+                stopPrice: order.stopPrice,
+                time: order.time,
+                updateTime: order.updateTime
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to get order ${orderId} for ${symbol}`, {
+                error: error.message
+            });
+            throw error;
+        }
+    }
     checkRateLimit() {
         const now = Date.now();
         // Reset rate limit counter if needed (Binance resets every minute)

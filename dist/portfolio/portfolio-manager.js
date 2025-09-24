@@ -118,6 +118,18 @@ class PortfolioManager extends events_1.EventEmitter {
         return totalValue;
     }
     /**
+     * Get all positions
+     */
+    getPositions() {
+        return Array.from(this.positions.values());
+    }
+    /**
+     * Get current price for a symbol (public version)
+     */
+    async getCurrentPrice(symbol) {
+        return await this.getPrice(symbol);
+    }
+    /**
      * Close a specific position
      */
     async closePosition(symbol) {
