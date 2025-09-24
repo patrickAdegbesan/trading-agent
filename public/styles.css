@@ -678,9 +678,74 @@ body {
     color: var(--text-secondary);
 }
 
+/* Portfolio Summary */
+.portfolio-summary {
+    margin: 1rem 0;
+}
+
+.portfolio-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.portfolio-stats .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--darker-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.portfolio-stats .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.portfolio-stats .stat-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.portfolio-stats .stat-item:nth-child(3) .stat-value {
+    color: var(--warning-color);
+    animation: pulse-orange 2s infinite;
+}
+
+@keyframes pulse-orange {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 /* Portfolio Positions */
 .portfolio-positions {
     margin-top: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.portfolio-positions::-webkit-scrollbar {
+    width: 6px;
+}
+
+.portfolio-positions::-webkit-scrollbar-track {
+    background: var(--darker-bg);
+    border-radius: 3px;
+}
+
+.portfolio-positions::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.portfolio-positions::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
 .position-item {
@@ -692,11 +757,59 @@ body {
     border-radius: 8px;
     margin-bottom: 0.5rem;
     border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.position-item:hover {
+    background: var(--card-bg);
+    border-color: var(--primary-color);
+}
+
+.position-item.active-order {
+    border-left: 3px solid var(--warning-color);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.position-item.active-order::after {
+    content: 'IN MOTION';
+    position: absolute;
+    top: 0.25rem;
+    right: 0.5rem;
+    font-size: 0.6rem;
+    color: var(--warning-color);
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
 .position-symbol {
     font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.position-symbol .symbol-text {
+    font-size: 0.95rem;
+}
+
+.position-symbol .symbol-status {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.position-symbol .symbol-status.holding {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success-color);
+}
+
+.position-symbol .symbol-status.moving {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+    animation: pulse-orange 1.5s infinite;
 }
 
 .position-value {
@@ -706,11 +819,19 @@ body {
 .position-amount {
     font-size: 0.875rem;
     color: var(--text-primary);
+    font-weight: 500;
+}
+
+.position-quantity {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
 }
 
 .position-pnl {
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: 600;
+    margin-top: 0.15rem;
 }
 
 .position-pnl.positive {
@@ -1105,6 +1226,34 @@ body {
     .perf-stat {
         flex: 1;
         min-width: 80px;
+    }
+    
+    /* Portfolio responsive styles */
+    .portfolio-stats {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .portfolio-stats .stat-item {
+        flex-direction: row;
+        justify-content: space-between;
+        text-align: left;
+    }
+    
+    .data-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .position-item {
+        padding: 0.5rem;
+    }
+    
+    .position-symbol .symbol-text {
+        font-size: 0.875rem;
+    }
+    
+    .position-amount {
+        font-size: 0.8rem;
     }
 }
 

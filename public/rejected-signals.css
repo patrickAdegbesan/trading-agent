@@ -76,6 +76,8 @@
 
 .rejected-signals-table {
     overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .rejected-signals-table table {
@@ -104,6 +106,30 @@
 
 .rejected-signals-table tbody tr:hover {
     background: var(--card-bg);
+}
+
+/* Custom Scrollbar for Rejected Signals Table */
+.rejected-signals-table::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.rejected-signals-table::-webkit-scrollbar-track {
+    background: var(--darker-bg);
+    border-radius: 4px;
+}
+
+.rejected-signals-table::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.rejected-signals-table::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+.rejected-signals-table::-webkit-scrollbar-corner {
+    background: var(--darker-bg);
 }
 
 .side-cell.buy {
@@ -163,6 +189,7 @@
 @media (max-width: 768px) {
     .rejected-signals-table {
         font-size: 0.8rem;
+        max-height: 300px; /* Reduce height on mobile */
     }
     
     .rejected-signals-container {
@@ -171,5 +198,10 @@
     
     .rejection-types-grid {
         gap: 0.5rem;
+    }
+    
+    .rejected-stats {
+        flex-direction: column;
+        gap: 0.75rem;
     }
 }

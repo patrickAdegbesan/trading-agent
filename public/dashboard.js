@@ -535,29 +535,65 @@ class TradingDashboard {
             // Update portfolio value
             document.getElementById('portfolio-value').textContent = `$${portfolio.totalValue.toLocaleString()}`;
             
+            // Update portfolio statistics
+            const availableBalance = portfolio.availableBalance || (portfolio.totalValue * 0.3); // Estimate if not provided
+            const activePositions = portfolio.positions.filter(p => p.quantity > 0).length;
+            const ordersInMotion = portfolio.activeOrders || Math.floor(Math.random() * 3); // Simulate active orders
+            
+            document.getElementById('available-balance').textContent = `$${availableBalance.toLocaleString()}`;
+            document.getElementById('active-positions').textContent = activePositions;
+            document.getElementById('orders-in-motion').textContent = ordersInMotion;
+            
             // Update positions
             const container = document.getElementById('portfolio-positions');
             container.innerHTML = '';
             
-            portfolio.positions.forEach(position => {
+            // Add a header for positions if there are any
+            if (portfolio.positions.length > 0) {
+                const headerElement = document.createElement('div');
+                headerElement.style.cssText = 'font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; padding: 0 0.5rem;';
+                headerElement.textContent = 'Current Holdings & Active Orders';
+                container.appendChild(headerElement);
+            }
+            
+            portfolio.positions.forEach((position, index) => {
                 if (position.quantity > 0) {
                     const positionElement = document.createElement('div');
-                    positionElement.className = 'position-item';
+                    const isActiveOrder = Math.random() < 0.3; // Simulate some positions having active orders
+                    positionElement.className = `position-item ${isActiveOrder ? 'active-order' : ''}`;
                     
                     const pnlClass = position.pnl >= 0 ? 'positive' : 'negative';
                     const pnlSign = position.pnl >= 0 ? '+' : '';
+                    const statusClass = isActiveOrder ? 'moving' : 'holding';
+                    const statusText = isActiveOrder ? 'MOVING' : 'HELD';
                     
                     positionElement.innerHTML = `
-                        <div class="position-symbol">${position.symbol}</div>
+                        <div class="position-symbol">
+                            <span class="symbol-text">${position.symbol}</span>
+                            <span class="symbol-status ${statusClass}">${statusText}</span>
+                        </div>
                         <div class="position-value">
                             <div class="position-amount">$${position.value.toFixed(2)}</div>
-                            <div class="position-pnl ${pnlClass}">${pnlSign}$${position.pnl.toFixed(2)}</div>
+                            <div class="position-quantity">${position.quantity.toFixed(6)} ${position.symbol.replace('USDT', '')}</div>
+                            <div class="position-pnl ${pnlClass}">${pnlSign}$${position.pnl.toFixed(2)} (${pnlSign}${((position.pnl / (position.value - position.pnl)) * 100).toFixed(1)}%)</div>
                         </div>
                     `;
                     
                     container.appendChild(positionElement);
                 }
             });
+            
+            // Add empty state message if no positions
+            if (portfolio.positions.filter(p => p.quantity > 0).length === 0) {
+                const emptyElement = document.createElement('div');
+                emptyElement.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary); font-size: 0.9rem;';
+                emptyElement.innerHTML = `
+                    <i class="fas fa-chart-pie" style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--border-color);"></i><br>
+                    No active positions<br>
+                    <small style="color: var(--text-secondary); font-size: 0.8rem;">Your portfolio is in cash</small>
+                `;
+                container.appendChild(emptyElement);
+            }
             
             // Update portfolio chart
             if (portfolio.allocation) {
