@@ -23,6 +23,8 @@ export declare class DashboardServer {
     private getTrades;
     private getPerformance;
     private getMLPredictions;
+    private getRejectedSignals;
+    private getTimeAgo;
     private getLiveData;
     private getPortfolio;
     private calculateWinRate;

@@ -74,17 +74,61 @@
 
             <!-- Charts Row -->
             <section class="charts-row">
-                <div class="chart-container">
+                <div class="chart-container enhanced-performance-chart">
                     <div class="chart-header">
-                        <h3><i class="fas fa-chart-area"></i> Performance Over Time</h3>
+                        <div class="chart-title">
+                            <h3><i class="fas fa-chart-area"></i> Performance Over Time</h3>
+                            <div class="performance-summary">
+                                <div class="performance-stat">
+                                    <span class="stat-label">24h Change</span>
+                                    <span class="stat-value" id="performance-24h-change">+0.00%</span>
+                                </div>
+                                <div class="performance-stat">
+                                    <span class="stat-label">Best Day</span>
+                                    <span class="stat-value" id="performance-best-day">+0.00%</span>
+                                </div>
+                                <div class="performance-stat">
+                                    <span class="stat-label">Max Drawdown</span>
+                                    <span class="stat-value negative" id="performance-drawdown">-0.00%</span>
+                                </div>
+                            </div>
+                        </div>
                         <div class="chart-controls">
-                            <button class="chart-btn active" data-period="1d">1D</button>
-                            <button class="chart-btn" data-period="7d">7D</button>
-                            <button class="chart-btn" data-period="30d">30D</button>
+                            <div class="metric-selector">
+                                <select id="metric-selector" class="metric-select" title="Select performance metric to display" aria-label="Performance metric selector">
+                                    <option value="pnl">P&L ($)</option>
+                                    <option value="pnl_percent">P&L (%)</option>
+                                    <option value="portfolio_value">Portfolio Value</option>
+                                    <option value="win_rate">Win Rate</option>
+                                    <option value="trades_count">Trade Count</option>
+                                </select>
+                            </div>
+                            <div class="time-controls">
+                                <button class="chart-btn" data-period="1h">1H</button>
+                                <button class="chart-btn" data-period="4h">4H</button>
+                                <button class="chart-btn active" data-period="1d">1D</button>
+                                <button class="chart-btn" data-period="7d">7D</button>
+                                <button class="chart-btn" data-period="30d">30D</button>
+                            </div>
+                            <button class="refresh-btn" onclick="refreshPerformanceChart()" title="Refresh performance data">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="chart-wrapper">
+                        <div class="chart-overlay" id="chart-loading">
+                            <div class="loading-spinner">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <span>Loading performance data...</span>
+                            </div>
+                        </div>
                         <canvas id="performanceChart"></canvas>
+                        <div class="chart-legend" id="chart-legend">
+                            <div class="legend-item">
+                                <span class="legend-color" data-color="#10b981"></span>
+                                <span class="legend-label">Current Value</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

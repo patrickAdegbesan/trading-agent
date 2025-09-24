@@ -476,6 +476,14 @@ export class OrderManager extends EventEmitter {
             minQuantity = 0.0001;  // Minimum quantity: 0.0001 ETH
             stepSize = 0.0001;     // Step size: 0.0001 ETH
             formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(4);
+        } else if (symbol === 'ADAUSDT') {
+            minQuantity = 0.1;     // Minimum quantity: 0.1 ADA
+            stepSize = 0.1;        // Step size: 0.1 ADA
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(1);
+        } else if (symbol === 'SOLUSDT') {
+            minQuantity = 0.001;   // Minimum quantity: 0.001 SOL
+            stepSize = 0.001;      // Step size: 0.001 SOL  
+            formattedQuantity = this.roundToStepSize(quantity, minQuantity, stepSize).toFixed(3);
         } else if (symbol.includes('USDT')) {
             minQuantity = 0.001;   // Default for USDT pairs
             stepSize = 0.001;
@@ -496,7 +504,17 @@ export class OrderManager extends EventEmitter {
         const numericValue = parseFloat(formattedQuantity);
         if (numericValue < minQuantity) {
             console.warn(`Quantity ${formattedQuantity} below minimum ${minQuantity} for ${symbol}, adjusting`);
-            formattedQuantity = minQuantity.toFixed(symbol === 'BTCUSDT' ? 5 : symbol === 'ETHUSDT' ? 4 : 3);
+            if (symbol === 'BTCUSDT') {
+                formattedQuantity = minQuantity.toFixed(5);
+            } else if (symbol === 'ETHUSDT') {
+                formattedQuantity = minQuantity.toFixed(4);
+            } else if (symbol === 'ADAUSDT') {
+                formattedQuantity = minQuantity.toFixed(1);
+            } else if (symbol === 'SOLUSDT') {
+                formattedQuantity = minQuantity.toFixed(3);
+            } else {
+                formattedQuantity = minQuantity.toFixed(3);
+            }
         }
 
         console.log(`📊 Formatted quantity for ${symbol}: ${quantity} → ${formattedQuantity}`);

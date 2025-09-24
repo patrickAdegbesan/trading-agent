@@ -286,88 +286,180 @@ class TradingDashboard {
         }
     }
 
-    async updatePerformance() {
+    async updatePerformance(timeframe = 'day', metric = 'pnl') {
         try {
-            const response = await fetch('/api/performance?days=7');
+            this.showPerformanceLoading(true);
+            
+            const response = await fetch(`/api/performance?timeframe=${timeframe}&metric=${metric}`);
             const data = await response.json();
             
             console.log('Performance data received:', data);
-            console.log('Chart data length:', data.chartData?.length);
+            
+            // Update performance summary stats
+            this.updatePerformanceSummary(data);
             
             if (data.chartData && data.chartData.length > 0) {
                 const chart = this.charts.performance;
                 
-                // Process timestamps - handle both string ISO dates and numeric timestamps
+                // Process timestamps
                 const labels = data.chartData.map(d => {
-                    let date;
-                    if (typeof d.timestamp === 'string') {
-                        date = new Date(d.timestamp);
-                    } else {
-                        date = new Date(d.timestamp); // numeric timestamp
-                    }
-                    
-                    // Format to show just time for recent data, or date + time for older data
-                    const now = new Date();
-                    const isToday = date.toDateString() === now.toDateString();
-                    
-                    if (isToday) {
-                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    } else {
-                        return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
-                               date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    }
+                    const date = new Date(typeof d.timestamp === 'string' ? d.timestamp : d.timestamp);
+                    return this.formatChartLabel(date, timeframe);
                 });
                 
-                const pnlData = data.chartData.map(d => d.cumulativePnL || 0);
+                // Get data based on selected metric
+                const chartData = this.getMetricData(data.chartData, metric);
                 
-                console.log('Chart labels sample:', labels.slice(0, 3));
-                console.log('Chart data sample:', pnlData.slice(0, 3));
-                console.log('Chart data min/max:', Math.min(...pnlData), Math.max(...pnlData));
-                
+                // Update chart
                 chart.data.labels = labels;
-                chart.data.datasets[0].data = pnlData;
+                chart.data.datasets[0].data = chartData;
+                chart.data.datasets[0].label = this.getMetricLabel(metric);
+                chart.data.datasets[0].borderColor = this.getMetricColor(metric);
+                chart.data.datasets[0].backgroundColor = this.getMetricColor(metric, 0.1);
                 
-                // Always set appropriate y-axis range for small values
-                const minVal = Math.min(...pnlData);
-                const maxVal = Math.max(...pnlData);
-                const dataRange = maxVal - minVal;
-                
-                if (dataRange < 2) {
-                    // For small values, set a fixed range to make the line visible
-                    const center = (minVal + maxVal) / 2;
-                    chart.options.scales.y.min = center - 1;
-                    chart.options.scales.y.max = center + 1;
-                } else {
-                    // For larger ranges, add 10% padding
-                    const padding = dataRange * 0.1;
-                    chart.options.scales.y.min = minVal - padding;
-                    chart.options.scales.y.max = maxVal + padding;
-                }
+                // Set appropriate y-axis range
+                this.updateChartScale(chart, chartData);
                 
                 chart.update('none');
-                
                 console.log('Chart updated successfully');
             } else {
-                console.warn('No chart data available');
-                // Show a visible baseline when no data is available
-                const chart = this.charts.performance;
-                const now = new Date();
-                chart.data.labels = [
-                    now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                ];
-                chart.data.datasets[0].data = [0];
-                
-                // Set visible y-axis range
-                chart.options.scales.y.min = -0.5;
-                chart.options.scales.y.max = 0.5;
-                
-                chart.update('none');
-                console.log('Chart set to "No Data" baseline');
+                this.showNoDataChart();
             }
+            
+            this.showPerformanceLoading(false);
             
         } catch (error) {
             console.error('Error updating performance:', error);
+            this.showPerformanceLoading(false);
         }
+    }
+
+    updatePerformanceSummary(data) {
+        const summaryContainer = document.getElementById('performance-summary');
+        if (!summaryContainer || !data.stats) return;
+        
+        const stats = data.stats;
+        
+        summaryContainer.innerHTML = `
+            <div class="perf-stat">
+                <div class="perf-stat-label">Total P&L</div>
+                <div class="perf-stat-value ${stats.totalPnL >= 0 ? 'positive' : 'negative'}">
+                    $${stats.totalPnL.toFixed(2)}
+                </div>
+            </div>
+            <div class="perf-stat">
+                <div class="perf-stat-label">Daily P&L</div>
+                <div class="perf-stat-value ${stats.dailyPnL >= 0 ? 'positive' : 'negative'}">
+                    $${stats.dailyPnL.toFixed(2)}
+                </div>
+            </div>
+            <div class="perf-stat">
+                <div class="perf-stat-label">Win Rate</div>
+                <div class="perf-stat-value">${stats.winRate.toFixed(1)}%</div>
+            </div>
+            <div class="perf-stat">
+                <div class="perf-stat-label">Sharpe Ratio</div>
+                <div class="perf-stat-value">${(stats.sharpeRatio || 0).toFixed(2)}</div>
+            </div>
+            <div class="perf-stat">
+                <div class="perf-stat-label">Max Drawdown</div>
+                <div class="perf-stat-value negative">${(stats.maxDrawdown || 0).toFixed(2)}%</div>
+            </div>
+        `;
+    }
+
+    getMetricData(chartData, metric) {
+        switch (metric) {
+            case 'pnl':
+                return chartData.map(d => d.cumulativePnL || 0);
+            case 'pnl_percent':
+                return chartData.map(d => d.pnlPercent || 0);
+            case 'portfolio_value':
+                return chartData.map(d => d.portfolioValue || 0);
+            case 'win_rate':
+                return chartData.map(d => d.winRate || 0);
+            case 'trades_count':
+                return chartData.map(d => d.tradesCount || 0);
+            default:
+                return chartData.map(d => d.cumulativePnL || 0);
+        }
+    }
+
+    getMetricLabel(metric) {
+        const labels = {
+            'pnl': 'P&L ($)',
+            'pnl_percent': 'P&L (%)',
+            'portfolio_value': 'Portfolio Value ($)',
+            'win_rate': 'Win Rate (%)',
+            'trades_count': 'Trade Count'
+        };
+        return labels[metric] || 'P&L ($)';
+    }
+
+    getMetricColor(metric, alpha = 1) {
+        const colors = {
+            'pnl': `rgba(16, 185, 129, ${alpha})`,
+            'pnl_percent': `rgba(59, 130, 246, ${alpha})`,
+            'portfolio_value': `rgba(139, 92, 246, ${alpha})`,
+            'win_rate': `rgba(245, 158, 11, ${alpha})`,
+            'trades_count': `rgba(239, 68, 68, ${alpha})`
+        };
+        return colors[metric] || `rgba(16, 185, 129, ${alpha})`;
+    }
+
+    formatChartLabel(date, timeframe) {
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        
+        switch (timeframe) {
+            case 'hour':
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            case 'day':
+                if (isToday) {
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                }
+            case 'week':
+                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            case 'month':
+                return date.toLocaleDateString([], { month: 'short', year: '2-digit' });
+            default:
+                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+    }
+
+    updateChartScale(chart, data) {
+        const minVal = Math.min(...data);
+        const maxVal = Math.max(...data);
+        const dataRange = maxVal - minVal;
+        
+        if (dataRange < 2) {
+            const center = (minVal + maxVal) / 2;
+            chart.options.scales.y.min = center - 1;
+            chart.options.scales.y.max = center + 1;
+        } else {
+            const padding = dataRange * 0.1;
+            chart.options.scales.y.min = minVal - padding;
+            chart.options.scales.y.max = maxVal + padding;
+        }
+    }
+
+    showPerformanceLoading(show) {
+        const loadingEl = document.getElementById('performance-loading');
+        if (loadingEl) {
+            loadingEl.classList.toggle('visible', show);
+        }
+    }
+
+    showNoDataChart() {
+        const chart = this.charts.performance;
+        const now = new Date();
+        chart.data.labels = [now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })];
+        chart.data.datasets[0].data = [0];
+        chart.options.scales.y.min = -0.5;
+        chart.options.scales.y.max = 0.5;
+        chart.update('none');
     }
 
     async updateMLPredictions() {
@@ -565,7 +657,10 @@ class TradingDashboard {
     }
 
     setupEventListeners() {
-        // Chart period buttons
+        // Performance chart controls
+        this.setupPerformanceChartControls();
+        
+        // Chart period buttons (legacy)
         document.querySelectorAll('.chart-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
@@ -597,6 +692,49 @@ class TradingDashboard {
                 e.preventDefault();
                 toggleNotifications();
             }
+        });
+    }
+
+    setupPerformanceChartControls() {
+        // Metric selector
+        const metricSelector = document.getElementById('metric-selector');
+        if (metricSelector) {
+            metricSelector.addEventListener('change', (e) => {
+                const metric = e.target.value;
+                const activeTimeBtn = document.querySelector('.time-btn.active');
+                const timeframe = activeTimeBtn ? activeTimeBtn.dataset.timeframe : 'day';
+                this.updatePerformance(timeframe, metric);
+            });
+        }
+
+        // Time period buttons
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                const timeframe = e.target.dataset.timeframe;
+                const metricSelector = document.getElementById('metric-selector');
+                const metric = metricSelector ? metricSelector.value : 'pnl';
+                this.updatePerformance(timeframe, metric);
+            });
+        });
+
+        // Set default active time button
+        const defaultTimeBtn = document.querySelector('.time-btn[data-timeframe="day"]');
+        if (defaultTimeBtn) {
+            defaultTimeBtn.classList.add('active');
+        }
+
+        // Initialize legend colors
+        this.updateLegendColors();
+    }
+
+    updateLegendColors() {
+        const legendColors = document.querySelectorAll('.legend-color[data-color]');
+        legendColors.forEach(colorEl => {
+            const color = colorEl.dataset.color;
+            colorEl.style.backgroundColor = color;
         });
     }
 

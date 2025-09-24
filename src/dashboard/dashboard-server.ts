@@ -263,27 +263,34 @@ export class DashboardServer {
     private async getPerformance(req: express.Request, res: express.Response) {
         try {
             const performance = await this.databaseService.getPerformance();
-            const days = parseInt(req.query.days as string) || 30;
+            const timeframe = req.query.timeframe as string || '24h';
+            const metric = req.query.metric as string || 'pnl';
             
-            // Get performance data for the last N days - but filter out clearly stale data first
+            // Convert timeframe to hours for filtering
+            const timeframeHours: { [key: string]: number } = {
+                '1h': 1,
+                '4h': 4,
+                '12h': 12,
+                '24h': 24,
+                '7d': 168,
+                '30d': 720
+            };
+            
+            const hours = timeframeHours[timeframe] || 24;
             const now = Date.now();
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-            
-            // Filter out old stale data (anything from before today - 1 day to be safe)
-            const oneDayAgo = now - (24 * 60 * 60 * 1000);
+            const cutoffTime = now - (hours * 60 * 60 * 1000);
             
             let recentPerformance = performance
                 .filter((p: any) => {
                     const timestamp = typeof p.timestamp === 'number' ? p.timestamp : Date.parse(p.timestamp);
-                    // Include only data from the last 24 hours to avoid stale test data
-                    return timestamp >= oneDayAgo && timestamp <= now;
+                    // Include only data from the selected timeframe
+                    return timestamp >= cutoffTime && timestamp <= now;
                 })
                 .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             
             // If no recent performance data, create baseline starting data for chart
             if (recentPerformance.length === 0) {
-                const startTime = now - (days * 24 * 60 * 60 * 1000); // N days ago
+                const startTime = cutoffTime;
                 
                 // Create baseline data points (starting portfolio value)
                 recentPerformance = [
@@ -329,8 +336,14 @@ export class DashboardServer {
                 summary: {
                     totalPnL: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
                     totalTrades: recentPerformance.length,
-                    avgDaily: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0) / days,
-                    maxDrawdown: this.calculateMaxDrawdown(recentPerformance)
+                    avgDaily: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0) / Math.max(1, hours / 24),
+                    maxDrawdown: this.calculateMaxDrawdown(recentPerformance),
+                    timeframe: timeframe,
+                    metric: metric,
+                    winRate: recentPerformance.length > 0 ? 
+                        recentPerformance[recentPerformance.length - 1].winRate || 0 : 0,
+                    currentValue: this.portfolioManager ? 
+                        (await this.portfolioManager.getPortfolio()).totalValue : 10000
                 }
             });
         } catch (error) {

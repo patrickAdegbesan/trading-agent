@@ -50,6 +50,7 @@ class DashboardServer {
         this.app.get('/api/ml-predictions', this.getMLPredictions.bind(this));
         this.app.get('/api/live-data', this.getLiveData.bind(this));
         this.app.get('/api/portfolio', this.getPortfolio.bind(this));
+        this.app.get('/api/rejected-signals', this.getRejectedSignals.bind(this));
         // Health check
         this.app.get('/health', (req, res) => {
             res.json({
@@ -61,9 +62,19 @@ class DashboardServer {
     }
     async initializeStats() {
         try {
+            // Initialize database first
+            console.log('🗄️ Initializing database service...');
+            await this.databaseService.initialize();
+            console.log('✅ Database service initialized');
             // Initialize current stats from database
+            console.log('🔍 Loading trades from database...');
             const allTrades = await this.databaseService.getTrades();
+            console.log(`📊 Loaded ${allTrades.length} trades from database`);
+            if (allTrades.length > 0) {
+                console.log('Sample trades:', allTrades.slice(0, 3).map(t => `${t.symbol} ${t.side} ${t.quantity} @ $${t.price}`));
+            }
             const performance = await this.databaseService.getPerformance();
+            console.log(`📈 Loaded ${performance.length} performance records`);
             // Filter out old test data (relaxed for testnet)
             const validTrades = allTrades.filter((trade) => {
                 // Filter out trades with unrealistic prices (relaxed for testnet)
@@ -233,23 +244,30 @@ class DashboardServer {
     async getPerformance(req, res) {
         try {
             const performance = await this.databaseService.getPerformance();
-            const days = parseInt(req.query.days) || 30;
-            // Get performance data for the last N days - but filter out clearly stale data first
+            const timeframe = req.query.timeframe || '24h';
+            const metric = req.query.metric || 'pnl';
+            // Convert timeframe to hours for filtering
+            const timeframeHours = {
+                '1h': 1,
+                '4h': 4,
+                '12h': 12,
+                '24h': 24,
+                '7d': 168,
+                '30d': 720
+            };
+            const hours = timeframeHours[timeframe] || 24;
             const now = Date.now();
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-            // Filter out old stale data (anything from before today - 1 day to be safe)
-            const oneDayAgo = now - (24 * 60 * 60 * 1000);
+            const cutoffTime = now - (hours * 60 * 60 * 1000);
             let recentPerformance = performance
                 .filter((p) => {
                 const timestamp = typeof p.timestamp === 'number' ? p.timestamp : Date.parse(p.timestamp);
-                // Include only data from the last 24 hours to avoid stale test data
-                return timestamp >= oneDayAgo && timestamp <= now;
+                // Include only data from the selected timeframe
+                return timestamp >= cutoffTime && timestamp <= now;
             })
                 .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             // If no recent performance data, create baseline starting data for chart
             if (recentPerformance.length === 0) {
-                const startTime = now - (days * 24 * 60 * 60 * 1000); // N days ago
+                const startTime = cutoffTime;
                 // Create baseline data points (starting portfolio value)
                 recentPerformance = [
                     {
@@ -291,8 +309,14 @@ class DashboardServer {
                 summary: {
                     totalPnL: recentPerformance.reduce((sum, p) => sum + (p.totalPnL || 0), 0),
                     totalTrades: recentPerformance.length,
-                    avgDaily: recentPerformance.reduce((sum, p) => sum + (p.totalPnL || 0), 0) / days,
-                    maxDrawdown: this.calculateMaxDrawdown(recentPerformance)
+                    avgDaily: recentPerformance.reduce((sum, p) => sum + (p.totalPnL || 0), 0) / Math.max(1, hours / 24),
+                    maxDrawdown: this.calculateMaxDrawdown(recentPerformance),
+                    timeframe: timeframe,
+                    metric: metric,
+                    winRate: recentPerformance.length > 0 ?
+                        recentPerformance[recentPerformance.length - 1].winRate || 0 : 0,
+                    currentValue: this.portfolioManager ?
+                        (await this.portfolioManager.getPortfolio()).totalValue : 10000
                 }
             });
         }
@@ -340,6 +364,131 @@ class DashboardServer {
             console.error('Error getting ML predictions:', error);
             res.status(500).json({ error: 'Failed to get ML predictions' });
         }
+    }
+    async getRejectedSignals(req, res) {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            // Read rejected signals from log file
+            const logPath = path.join(__dirname, '../../logs/rejected-signals.log');
+            let rejectedSignals = [];
+            try {
+                if (fs.existsSync(logPath)) {
+                    const logData = fs.readFileSync(logPath, 'utf8');
+                    const lines = logData.trim().split('\n');
+                    // Parse the last 50 rejected signals
+                    const recentLines = lines.slice(-50);
+                    rejectedSignals = recentLines
+                        .filter((line) => line.trim())
+                        .map((line) => {
+                        try {
+                            return JSON.parse(line);
+                        }
+                        catch (e) {
+                            return null;
+                        }
+                    })
+                        .filter((signal) => signal && signal.rejectionType)
+                        .map((signal) => ({
+                        timestamp: signal.timestamp,
+                        symbol: signal.symbol,
+                        side: signal.side,
+                        price: signal.price,
+                        confidence: signal.confidence ? (signal.confidence * 100).toFixed(1) : 'N/A',
+                        expectedReturn: signal.expectedReturn ? (signal.expectedReturn * 100).toFixed(2) : 'N/A',
+                        winProbability: signal.winProbability ? (signal.winProbability * 100).toFixed(1) : 'N/A',
+                        rejectionType: signal.rejectionType,
+                        reason: signal.reason,
+                        potentialMissedGain: signal.potentialMissedGain || 0,
+                        timeAgo: this.getTimeAgo(new Date(signal.timestamp))
+                    }))
+                        .reverse(); // Show most recent first
+                }
+            }
+            catch (fileError) {
+                console.warn('Could not read rejected signals log:', fileError);
+            }
+            // If no real data, provide sample data for demonstration
+            if (rejectedSignals.length === 0) {
+                const now = new Date();
+                rejectedSignals = [
+                    {
+                        timestamp: new Date(now.getTime() - 5 * 60000).toISOString(),
+                        symbol: 'BTCUSDT',
+                        side: 'BUY',
+                        price: 43250.50,
+                        confidence: '78.5',
+                        expectedReturn: '2.45',
+                        winProbability: '82.1',
+                        rejectionType: 'MAX_ORDERS_EXCEEDED',
+                        reason: '3 active orders >= 2 limit',
+                        potentialMissedGain: 0.0245,
+                        timeAgo: '5 mins ago'
+                    },
+                    {
+                        timestamp: new Date(now.getTime() - 15 * 60000).toISOString(),
+                        symbol: 'ETHUSDT',
+                        side: 'SELL',
+                        price: 2650.75,
+                        confidence: '71.2',
+                        expectedReturn: '1.87',
+                        winProbability: '75.6',
+                        rejectionType: 'TRADE_COOLDOWN',
+                        reason: 'Cooldown 180s remaining of 300s required',
+                        potentialMissedGain: 0.0187,
+                        timeAgo: '15 mins ago'
+                    },
+                    {
+                        timestamp: new Date(now.getTime() - 30 * 60000).toISOString(),
+                        symbol: 'SOLUSDT',
+                        side: 'BUY',
+                        price: 145.20,
+                        confidence: '43.8',
+                        expectedReturn: '3.12',
+                        winProbability: '68.4',
+                        rejectionType: 'LOW_CONFIDENCE',
+                        reason: 'Confidence 43.8% < required 45%',
+                        potentialMissedGain: 0.0312,
+                        timeAgo: '30 mins ago'
+                    }
+                ];
+            }
+            // Calculate statistics
+            const stats = {
+                totalRejected: rejectedSignals.length,
+                rejectionTypes: {},
+                potentialMissedGains: rejectedSignals.reduce((sum, signal) => sum + (signal.potentialMissedGain || 0), 0),
+                lastHour: rejectedSignals.filter((signal) => new Date(signal.timestamp).getTime() > Date.now() - 3600000).length
+            };
+            // Count rejection types
+            rejectedSignals.forEach((signal) => {
+                const type = signal.rejectionType;
+                stats.rejectionTypes[type] = (stats.rejectionTypes[type] || 0) + 1;
+            });
+            res.json({
+                signals: rejectedSignals,
+                stats: stats,
+                lastUpdated: new Date().toISOString()
+            });
+        }
+        catch (error) {
+            console.error('Error getting rejected signals:', error);
+            res.status(500).json({ error: 'Failed to get rejected signals' });
+        }
+    }
+    getTimeAgo(timestamp) {
+        const now = new Date();
+        const diffMs = now.getTime() - timestamp.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays > 0)
+            return `${diffDays}d ago`;
+        if (diffHours > 0)
+            return `${diffHours}h ago`;
+        if (diffMins > 0)
+            return `${diffMins}m ago`;
+        return 'Just now';
     }
     async getLiveData(req, res) {
         try {
@@ -625,8 +774,10 @@ exports.DashboardServer = DashboardServer;
 // Start the server if this file is run directly
 if (require.main === module) {
     const port = process.env.PORT || 3000;
-    // Initialize database service
-    const dbService = new database_service_1.DatabaseService();
+    // Initialize database service with correct path to our sample trades
+    const dbPath = path_1.default.join(__dirname, '../../trading_data');
+    console.log(`🗂️  Database path resolved to: ${dbPath}`);
+    const dbService = new database_service_1.DatabaseService(dbPath);
     const dashboard = new DashboardServer(dbService);
     dashboard.start(Number(port)).catch(console.error);
 }

@@ -1,8 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TradingAgent = void 0;
 const settings_1 = require("../config/settings");
 const events_1 = require("events");
+const winston_1 = __importDefault(require("winston"));
 class TradingAgent extends events_1.EventEmitter {
     /**
      * Set trading agent active state
@@ -64,11 +68,30 @@ class TradingAgent extends events_1.EventEmitter {
         this.portfolioManager = portfolioManager;
         this.orderManager = orderManager;
         this.riskManager = riskManager;
+        // Initialize logger for rejected signals tracking
+        this.logger = winston_1.default.createLogger({
+            level: 'info',
+            format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.json()),
+            transports: [
+                new winston_1.default.transports.Console(),
+                new winston_1.default.transports.File({ filename: 'logs/trading-agent.log' }),
+                new winston_1.default.transports.File({
+                    filename: 'logs/rejected-signals.log',
+                    level: 'warn' // Only rejected signals go to this file
+                })
+            ]
+        });
         // Initialize configurable settings
         this.TRADE_COOLDOWN_MS = settings_1.settings.positionManagement.tradeCooldownMinutes * 60 * 1000;
         this.MAX_ORDERS_PER_SYMBOL = settings_1.settings.positionManagement.maxOrdersPerSymbol;
         this.MIN_PRICE_CHANGE_PERCENT = settings_1.settings.positionManagement.minPriceChangePercent;
         this.SIGNAL_DEDUP_MS = settings_1.settings.positionManagement.signalDedupMinutes * 60 * 1000;
+        this.logger.info('TradingAgent initialized', {
+            tradeCooldownMs: this.TRADE_COOLDOWN_MS,
+            maxOrdersPerSymbol: this.MAX_ORDERS_PER_SYMBOL,
+            minPriceChangePercent: this.MIN_PRICE_CHANGE_PERCENT,
+            signalDedupMs: this.SIGNAL_DEDUP_MS
+        });
     }
     async executeTrade(signal) {
         try {
@@ -77,6 +100,22 @@ class TradingAgent extends events_1.EventEmitter {
             // 🔍 SIGNAL DEDUPLICATION CHECK
             const dedupCheck = this.shouldProcessSignal(signal);
             if (!dedupCheck.shouldProcess) {
+                // Log rejected signal with full details
+                this.logger.warn('Signal rejected - Duplicate', {
+                    rejectionType: 'DUPLICATE_SIGNAL',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    reason: dedupCheck.reason,
+                    timestamp: signal.timestamp || Date.now(),
+                    marketData: {
+                        currentPrice: signal.price,
+                        lastSignalTime: this.lastSignalCache.get(signal.symbol)?.timestamp
+                    }
+                });
                 console.log(`🔄 Skipping duplicate signal for ${signal.symbol}: ${dedupCheck.reason}`);
                 return {
                     success: false,
@@ -85,6 +124,20 @@ class TradingAgent extends events_1.EventEmitter {
             }
             // Check confidence threshold
             if (!signal.confidence || signal.confidence < this.MIN_CONFIDENCE) {
+                // Log rejected signal with full details
+                this.logger.warn('Signal rejected - Low confidence', {
+                    rejectionType: 'LOW_CONFIDENCE',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    requiredConfidence: this.MIN_CONFIDENCE,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    reason: `Confidence ${(signal.confidence || 0) * 100}% < required ${this.MIN_CONFIDENCE * 100}%`,
+                    timestamp: signal.timestamp || Date.now(),
+                    potentialMissedGain: signal.expectedReturn || 0
+                });
                 const result = {
                     success: false,
                     reason: 'Insufficient confidence level'
@@ -96,6 +149,28 @@ class TradingAgent extends events_1.EventEmitter {
             // Check if there are already active orders for this symbol
             const activeOrders = this.orderManager.getActiveOrdersForSymbol(signal.symbol);
             if (activeOrders.length >= this.MAX_ORDERS_PER_SYMBOL) {
+                // Log rejected signal with active orders details
+                this.logger.warn('Signal rejected - Too many active orders', {
+                    rejectionType: 'MAX_ORDERS_EXCEEDED',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    activeOrdersCount: activeOrders.length,
+                    maxAllowedOrders: this.MAX_ORDERS_PER_SYMBOL,
+                    activeOrders: activeOrders.map(order => ({
+                        id: order.id,
+                        side: order.side,
+                        price: order.price,
+                        quantity: order.quantity,
+                        status: order.status
+                    })),
+                    reason: `${activeOrders.length} active orders >= ${this.MAX_ORDERS_PER_SYMBOL} limit`,
+                    timestamp: signal.timestamp || Date.now(),
+                    potentialMissedGain: signal.expectedReturn || 0
+                });
                 console.log(`⚠️ Skipping trade for ${signal.symbol} - ${activeOrders.length} active orders already exist (max: ${this.MAX_ORDERS_PER_SYMBOL})`);
                 return {
                     success: false,
@@ -107,6 +182,23 @@ class TradingAgent extends events_1.EventEmitter {
             const timeSinceLastTrade = Date.now() - lastTradeTime;
             if (timeSinceLastTrade < this.TRADE_COOLDOWN_MS) {
                 const remainingCooldown = Math.ceil((this.TRADE_COOLDOWN_MS - timeSinceLastTrade) / 1000);
+                // Log rejected signal with cooldown details
+                this.logger.warn('Signal rejected - Trade cooldown active', {
+                    rejectionType: 'TRADE_COOLDOWN',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    lastTradeTime: new Date(lastTradeTime).toISOString(),
+                    timeSinceLastTradeMs: timeSinceLastTrade,
+                    requiredCooldownMs: this.TRADE_COOLDOWN_MS,
+                    remainingCooldownSec: remainingCooldown,
+                    reason: `Cooldown ${remainingCooldown}s remaining of ${this.TRADE_COOLDOWN_MS / 1000}s required`,
+                    timestamp: signal.timestamp || Date.now(),
+                    potentialMissedGain: signal.expectedReturn || 0
+                });
                 console.log(`⏰ Trade cooldown active for ${signal.symbol} - ${remainingCooldown}s remaining`);
                 return {
                     success: false,
@@ -115,6 +207,19 @@ class TradingAgent extends events_1.EventEmitter {
             }
             // Skip CLOSE signals for now - we'll handle position closing separately
             if (signal.side === 'CLOSE') {
+                // Log rejected CLOSE signal
+                this.logger.warn('Signal rejected - CLOSE signals not implemented', {
+                    rejectionType: 'CLOSE_NOT_IMPLEMENTED',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    reason: 'CLOSE signal functionality not yet implemented',
+                    timestamp: signal.timestamp || Date.now(),
+                    note: 'Position closing handled separately from trading signals'
+                });
                 console.log(`[TradingAgent] CLOSE signal received for ${signal.symbol}, skipping order execution.`);
                 return {
                     success: false,
@@ -135,6 +240,27 @@ class TradingAgent extends events_1.EventEmitter {
             // Calculate risk-adjusted position size using proper risk assessment
             const riskAssessment = this.riskManager.assessTradeRisk(tradeSignal, signal.price || 0);
             if (!riskAssessment.approved) {
+                // Log rejected signal with risk assessment details
+                this.logger.warn('Signal rejected - Risk manager denial', {
+                    rejectionType: 'RISK_MANAGER_DENIAL',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    riskAssessment: {
+                        approved: riskAssessment.approved,
+                        reason: riskAssessment.reason,
+                        positionSize: riskAssessment.positionSize,
+                        riskScore: riskAssessment.riskScore,
+                        adjustedSignal: riskAssessment.adjustedSignal
+                    },
+                    reason: `Risk manager rejection: ${riskAssessment.reason}`,
+                    timestamp: signal.timestamp || Date.now(),
+                    potentialMissedGain: signal.expectedReturn || 0,
+                    riskMitigated: true
+                });
                 console.log(`⚠️ Trade rejected by risk manager: ${riskAssessment.reason}`);
                 return {
                     success: false,
@@ -143,6 +269,24 @@ class TradingAgent extends events_1.EventEmitter {
             }
             const positionSize = riskAssessment.positionSize;
             if (!positionSize || positionSize <= 0) {
+                // Log rejected signal with position size details
+                this.logger.warn('Signal rejected - Invalid position size', {
+                    rejectionType: 'INVALID_POSITION_SIZE',
+                    symbol: signal.symbol,
+                    side: signal.side,
+                    price: signal.price,
+                    confidence: signal.confidence,
+                    expectedReturn: signal.expectedReturn,
+                    winProbability: signal.winProbability,
+                    calculatedPositionSize: positionSize,
+                    riskAssessment: {
+                        approved: riskAssessment.approved,
+                        riskScore: riskAssessment.riskScore
+                    },
+                    reason: `Invalid position size: ${positionSize}`,
+                    timestamp: signal.timestamp || Date.now(),
+                    potentialMissedGain: signal.expectedReturn || 0
+                });
                 return {
                     success: false,
                     reason: 'Invalid position size calculated'
@@ -156,6 +300,20 @@ class TradingAgent extends events_1.EventEmitter {
                 quantity: positionSize,
                 price: signal.price
             };
+            // Log signal acceptance before execution
+            this.logger.info('Signal accepted - Executing trade', {
+                signalStatus: 'ACCEPTED',
+                symbol: signal.symbol,
+                side: signal.side,
+                price: signal.price,
+                confidence: signal.confidence,
+                expectedReturn: signal.expectedReturn,
+                winProbability: signal.winProbability,
+                positionSize: positionSize,
+                riskScore: riskAssessment.riskScore,
+                orderRequest: orderRequest,
+                timestamp: signal.timestamp || Date.now()
+            });
             // Execute the trade through order manager
             const result = await this.orderManager.submitOrder(orderRequest);
             // Update portfolio if trade was successful
@@ -167,6 +325,22 @@ class TradingAgent extends events_1.EventEmitter {
                     quantity: result.details.quantity,
                     price: result.details.price,
                     timestamp: result.details.timestamp
+                });
+                // Log successful trade execution
+                this.logger.info('Trade executed successfully', {
+                    executionStatus: 'SUCCESS',
+                    symbol: signal.symbol,
+                    orderId: result.orderId,
+                    executedPrice: result.details.price,
+                    executedQuantity: result.details.quantity,
+                    side: signal.side,
+                    originalSignal: {
+                        confidence: signal.confidence,
+                        expectedReturn: signal.expectedReturn,
+                        winProbability: signal.winProbability
+                    },
+                    executionTime: result.details.timestamp,
+                    totalValue: result.details.price * result.details.quantity
                 });
                 // Log successful trade with complete details
                 console.log(`🎯 ML-DRIVEN TRADE EXECUTED for ${signal.symbol}:`, {
@@ -316,6 +490,45 @@ class TradingAgent extends events_1.EventEmitter {
             };
         }
         return predictions;
+    }
+    /**
+     * Get rejected signal statistics from logs
+     */
+    async getRejectedSignalStats() {
+        // This is a placeholder - in a real implementation, you'd parse the log file
+        // For now, we'll return empty stats structure
+        const stats = {
+            rejectionReasons: {
+                'DUPLICATE_SIGNAL': 0,
+                'LOW_CONFIDENCE': 0,
+                'MAX_ORDERS_EXCEEDED': 0,
+                'TRADE_COOLDOWN': 0,
+                'RISK_MANAGER_DENIAL': 0,
+                'INVALID_POSITION_SIZE': 0,
+                'CLOSE_NOT_IMPLEMENTED': 0
+            },
+            totalRejected: 0,
+            potentialMissedGains: 0,
+            rejectionsBySymbol: {},
+            lastHourRejections: 0
+        };
+        this.logger.info('Rejected signal statistics requested', { stats });
+        return stats;
+    }
+    /**
+     * Log current trading agent configuration
+     */
+    logConfiguration() {
+        this.logger.info('Trading agent configuration', {
+            isActive: this.isActive,
+            minConfidence: this.MIN_CONFIDENCE,
+            tradeCooldownMs: this.TRADE_COOLDOWN_MS,
+            maxOrdersPerSymbol: this.MAX_ORDERS_PER_SYMBOL,
+            minPriceChangePercent: this.MIN_PRICE_CHANGE_PERCENT,
+            signalDedupMs: this.SIGNAL_DEDUP_MS,
+            cachedSignalsCount: this.lastSignalCache.size,
+            lastTradeTimesCount: this.lastTradeTime.size
+        });
     }
 }
 exports.TradingAgent = TradingAgent;

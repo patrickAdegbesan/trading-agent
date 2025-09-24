@@ -9,6 +9,7 @@ export declare class TradingAgent extends EventEmitter {
     private portfolioManager;
     private orderManager;
     private riskManager;
+    private logger;
     private isActive;
     private lastTradeTime;
     private lastSignalCache;
@@ -55,4 +56,22 @@ export declare class TradingAgent extends EventEmitter {
     getLatestPredictions(): {
         [symbol: string]: any;
     };
+    /**
+     * Get rejected signal statistics from logs
+     */
+    getRejectedSignalStats(): Promise<{
+        rejectionReasons: {
+            [key: string]: number;
+        };
+        totalRejected: number;
+        potentialMissedGains: number;
+        rejectionsBySymbol: {
+            [key: string]: number;
+        };
+        lastHourRejections: number;
+    }>;
+    /**
+     * Log current trading agent configuration
+     */
+    logConfiguration(): void;
 }

@@ -24,19 +24,182 @@
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
-    color: var(--text-primary);
-    min-height: 100vh;
-    line-height: 1.6;
+    color: var(--text-primary)}
+
+/* Rejected Signals Styles */
+.rejected-signals-row {
+    margin-bottom: 2rem;
 }
 
-.dashboard-container {
-    min-height: 100vh;
+.rejected-signals-container {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.rejected-stats {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.stat-item i {
+    color: var(--warning-color);
+}
+
+.rejected-signals-content {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+}
+
+.rejection-types-summary h4 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.rejection-types-grid {
     display: flex;
     flex-direction: column;
+    gap: 0.75rem;
 }
 
-/* Header */
-.dashboard-header {
+.rejection-type-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--darker-bg);
+    border-radius: 8px;
+    border-left: 3px solid var(--warning-color);
+}
+
+.rejection-type-name {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.rejection-type-count {
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--warning-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+.rejected-signals-table {
+    overflow-x: auto;
+}
+
+.rejected-signals-table table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--darker-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.rejected-signals-table th {
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.rejected-signals-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.rejected-signals-table tbody tr:hover {
+    background: var(--card-bg);
+}
+
+.side-cell.buy {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.side-cell.sell {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.confidence-cell.high-confidence {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.confidence-cell.medium-confidence {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+.confidence-cell.low-confidence {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.reason-cell {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.gain-cell {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+.time-cell {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 1024px) {
+    .rejected-signals-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .rejected-stats {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .rejected-signals-table {
+        font-size: 0.8rem;
+    }
+    
+    .rejected-signals-container {
+        padding: 1rem;
+    }
+    
+    .rejection-types-grid {
+        gap: 0.5rem;
+    }
+}
     background: var(--card-bg);
     border-bottom: 1px solid var(--border-color);
     padding: 1rem 2rem;
@@ -785,6 +948,166 @@ body {
     }
 }
 
+/* Enhanced Performance Chart Styles */
+.performance-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.perf-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    min-width: 100px;
+}
+
+.perf-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.perf-stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.perf-stat-value.positive {
+    color: var(--success-color);
+}
+
+.perf-stat-value.negative {
+    color: var(--danger-color);
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.metric-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.metric-select {
+    padding: 0.5rem 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.metric-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.time-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.time-btn {
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.time-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.time-btn.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.loading-spinner {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.loading-spinner.visible {
+    display: flex;
+}
+
+.loading-spinner i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+}
+
+.chart-legend {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.legend-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .chart-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .performance-summary {
+        justify-content: center;
+    }
+    
+    .perf-stat {
+        flex: 1;
+        min-width: 80px;
+    }
+}
+
 @media (max-width: 480px) {
     .metric-card {
         padding: 1rem;
@@ -802,5 +1125,14 @@ body {
     
     .dashboard-header h1 {
         font-size: 1.25rem;
+    }
+    
+    .time-controls {
+        justify-content: center;
+    }
+    
+    .time-btn {
+        flex: 1;
+        text-align: center;
     }
 }

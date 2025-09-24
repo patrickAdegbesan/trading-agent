@@ -22,6 +22,7 @@ export interface CacheConfig {
 export declare class CachedDataCollector {
     private dataCollector;
     private cacheConfig;
+    private logger;
     constructor(dataCollector: DataCollector);
     /**
      * Get market snapshot with caching
@@ -59,6 +60,10 @@ export declare class CachedDataCollector {
      * Get cache statistics
      */
     getCacheStats(): import("./redis-service").CacheStats;
+    /**
+     * Log current cache configuration
+     */
+    logCacheConfig(): void;
     /**
      * Start data collection using underlying collector
      */
