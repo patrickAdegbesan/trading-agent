@@ -144,6 +144,88 @@ class Database extends events_1.EventEmitter {
     getPerformanceHistory() {
         return [...this.performanceHistory];
     }
+    async calculateAndSavePerformanceMetrics() {
+        if (!this.isInitialized)
+            throw new Error('Database not initialized');
+        const trades = this.getAllTrades();
+        const positions = this.getAllPositions();
+        let totalPnL = 0;
+        let totalTrades = trades.length;
+        let winningTrades = 0;
+        let losingTrades = 0;
+        let totalWinAmount = 0;
+        let totalLossAmount = 0;
+        // Calculate P&L from closed trades
+        for (const trade of trades) {
+            if (trade.status === 'FILLED' && trade.executedPrice !== undefined) {
+                // For simplicity, assume each trade has some profit/loss
+                // In real implementation, you'd calculate based on entry/exit prices
+                const pnl = trade.side === 'BUY' ?
+                    (trade.executedPrice - trade.price) * trade.quantity :
+                    (trade.price - trade.executedPrice) * trade.quantity;
+                totalPnL += pnl;
+                if (pnl > 0) {
+                    winningTrades++;
+                    totalWinAmount += pnl;
+                }
+                else if (pnl < 0) {
+                    losingTrades++;
+                    totalLossAmount += Math.abs(pnl);
+                }
+            }
+        }
+        // Calculate open positions P&L (this is simplified)
+        for (const position of positions) {
+            if (position.size !== 0) {
+                // This would require current market price to calculate unrealized P&L
+                // For now, we'll skip unrealized P&L
+            }
+        }
+        const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+        const averageWin = winningTrades > 0 ? totalWinAmount / winningTrades : 0;
+        const averageLoss = losingTrades > 0 ? totalLossAmount / losingTrades : 0;
+        const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : 0;
+        // Calculate max drawdown (simplified)
+        let maxDrawdown = 0;
+        let maxDrawdownPercent = 0;
+        let runningPnL = 0;
+        let peak = 0;
+        for (const trade of trades) {
+            if (trade.status === 'FILLED' && trade.executedPrice !== undefined) {
+                const tradePnL = trade.side === 'BUY' ?
+                    (trade.executedPrice - trade.price) * trade.quantity :
+                    (trade.price - trade.executedPrice) * trade.quantity;
+                runningPnL += tradePnL;
+                if (runningPnL > peak) {
+                    peak = runningPnL;
+                }
+                const drawdown = peak - runningPnL;
+                if (drawdown > maxDrawdown) {
+                    maxDrawdown = drawdown;
+                    maxDrawdownPercent = peak > 0 ? (drawdown / peak) * 100 : 0;
+                }
+            }
+        }
+        // Calculate Sharpe ratio (simplified - would need risk-free rate and return standard deviation)
+        const sharpeRatio = 0; // Placeholder
+        const metrics = {
+            totalTrades,
+            winningTrades,
+            losingTrades,
+            winRate: Math.round(winRate * 100) / 100,
+            totalPnL: Math.round(totalPnL * 100) / 100,
+            maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+            maxDrawdownPercent: Math.round(maxDrawdownPercent * 100) / 100,
+            sharpeRatio: Math.round(sharpeRatio * 100) / 100,
+            averageWin: Math.round(averageWin * 100) / 100,
+            averageLoss: Math.round(averageLoss * 100) / 100,
+            profitFactor: Math.round(profitFactor * 100) / 100,
+            timestamp: Date.now()
+        };
+        await this.savePerformanceMetrics(metrics);
+        console.log(`💰 Calculated performance: ${totalTrades} trades, ${totalPnL.toFixed(2)} PnL, ${winRate.toFixed(1)}% win rate`);
+        return metrics;
+    }
     // Market data operations
     async saveMarketData(data) {
         if (!this.isInitialized)

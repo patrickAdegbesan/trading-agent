@@ -96,6 +96,7 @@ export declare class Database extends EventEmitter {
     savePerformanceMetrics(metrics: PerformanceMetrics): Promise<void>;
     getLatestPerformance(): PerformanceMetrics | undefined;
     getPerformanceHistory(): PerformanceMetrics[];
+    calculateAndSavePerformanceMetrics(): Promise<PerformanceMetrics>;
     saveMarketData(data: MarketDataRecord): Promise<void>;
     getMarketData(symbol: string, limit?: number): MarketDataRecord[];
     calculateProfitLoss(): {

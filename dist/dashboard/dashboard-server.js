@@ -64,12 +64,12 @@ class DashboardServer {
             // Initialize current stats from database
             const allTrades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
-            // Filter out old test data
+            // Filter out old test data (relaxed for testnet)
             const validTrades = allTrades.filter((trade) => {
-                // Filter out trades with unrealistic prices (test data)
-                if (trade.symbol === 'BTCUSDT' && trade.price < 80000)
+                // Filter out trades with unrealistic prices (relaxed for testnet)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 10000)
                     return false;
-                if (trade.symbol === 'ETHUSDT' && trade.price < 2000)
+                if (trade.symbol === 'ETHUSDT' && trade.price < 500)
                     return false;
                 // Filter out very old trades (older than 7 days)
                 const tradeDate = new Date(trade.timestamp);
@@ -112,12 +112,12 @@ class DashboardServer {
         try {
             const allTrades = await this.databaseService.getTrades();
             const performance = await this.databaseService.getPerformance();
-            // Filter out old test data
+            // Filter out old test data (relaxed for testnet)
             const validTrades = allTrades.filter((trade) => {
-                // Filter out trades with unrealistic prices (test data)
-                if (trade.symbol === 'BTCUSDT' && trade.price < 80000)
+                // Filter out trades with unrealistic prices (relaxed for testnet)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 10000)
                     return false;
-                if (trade.symbol === 'ETHUSDT' && trade.price < 2000)
+                if (trade.symbol === 'ETHUSDT' && trade.price < 500)
                     return false;
                 // Filter out very old trades (older than 7 days)
                 const tradeDate = new Date(trade.timestamp);
@@ -176,12 +176,12 @@ class DashboardServer {
         try {
             const limit = parseInt(req.query.limit) || 50;
             const trades = await this.databaseService.getTrades();
-            // Filter out old test data and clearly invalid trades
+            // Filter out old test data and clearly invalid trades (relaxed for testnet)
             const validTrades = trades.filter((trade) => {
-                // Filter out trades with unrealistic prices (test data)
-                if (trade.symbol === 'BTCUSDT' && trade.price < 80000)
+                // Filter out trades with unrealistic prices (relaxed for testnet)
+                if (trade.symbol === 'BTCUSDT' && trade.price < 10000)
                     return false;
-                if (trade.symbol === 'ETHUSDT' && trade.price < 2000)
+                if (trade.symbol === 'ETHUSDT' && trade.price < 500)
                     return false;
                 // Filter out very old trades (older than 7 days)
                 const tradeDate = new Date(trade.timestamp);
