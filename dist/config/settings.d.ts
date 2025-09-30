@@ -1,12 +1,18 @@
 export interface TradingConfig {
+    exchange: 'binance' | 'bybit';
     binance: {
         apiKey: string;
         apiSecret: string;
         testnet: boolean;
     };
+    bybit: {
+        apiKey: string;
+        apiSecret: string;
+    };
     database: {
         url: string;
         timescaleUrl?: string;
+        redisEnabled: boolean;
         redisUrl: string;
     };
     trading: {

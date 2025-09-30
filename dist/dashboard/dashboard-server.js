@@ -537,62 +537,25 @@ class DashboardServer {
     async getPortfolio(req, res) {
         try {
             let portfolio = {
-                totalValue: 15000.00, // Realistic fallback based on actual trading
-                cash: 12000.00, // Conservative cash position 
+                totalValue: 0,
+                cash: 0,
                 positions: [],
                 allocation: {},
                 lastUpdate: new Date().toISOString()
             };
             if (this.portfolioManager) {
-                try {
-                    // Get real portfolio data
-                    const cash = this.portfolioManager.getBalance();
-                    const portfolioData = await this.portfolioManager.getPortfolio();
-                    // Calculate total value
-                    let totalValue = portfolioData.totalValue || cash;
-                    // Process positions - get actual position objects with PnL
-                    const portfolioPositions = [];
-                    const allocation = { Cash: cash };
-                    // Get actual position objects from portfolio manager
-                    const positions = this.portfolioManager.getPositions();
-                    for (const position of positions) {
-                        if (position.quantity !== 0) {
-                            const currentPrice = await this.portfolioManager.getCurrentPrice(position.symbol);
-                            const value = Math.abs(position.quantity) * currentPrice;
-                            // Calculate PnL
-                            const pnl = position.quantity > 0
-                                ? (currentPrice - position.entryPrice) * position.quantity
-                                : (position.entryPrice - currentPrice) * Math.abs(position.quantity);
-                            portfolioPositions.push({
-                                symbol: position.symbol,
-                                quantity: position.quantity,
-                                entryPrice: position.entryPrice,
-                                currentPrice: currentPrice,
-                                value: parseFloat(value.toFixed(2)),
-                                pnl: parseFloat(pnl.toFixed(2)),
-                                pnlPercent: parseFloat(((pnl / (position.entryPrice * Math.abs(position.quantity))) * 100).toFixed(2)),
-                                side: position.quantity > 0 ? 'LONG' : 'SHORT',
-                                timestamp: position.timestamp
-                            });
-                            // Calculate allocation
-                            const baseAsset = position.symbol.replace('USDT', '');
-                            allocation[baseAsset] = parseFloat(((value / totalValue) * 100).toFixed(1));
-                        }
-                    }
-                    // Update cash allocation percentage
-                    allocation.Cash = parseFloat(((cash / totalValue) * 100).toFixed(1));
-                    portfolio = {
-                        totalValue: parseFloat(totalValue.toFixed(2)),
-                        cash: parseFloat(cash.toFixed(2)),
-                        positions: portfolioPositions,
-                        allocation,
-                        lastUpdate: new Date().toISOString()
-                    };
-                }
-                catch (portfolioError) {
-                    console.warn('Could not get live portfolio data:', portfolioError);
-                    // Keep default portfolio data as fallback
-                }
+                const cash = this.portfolioManager.getBalance();
+                const positions = this.portfolioManager.getPositions();
+                const totalValue = await this.portfolioManager.getTotalValue();
+                portfolio.cash = cash;
+                portfolio.totalValue = totalValue;
+                portfolio.positions = positions.map(pos => ({
+                    symbol: pos.symbol,
+                    entryPrice: pos.entryPrice,
+                    currentPrice: pos.currentPrice,
+                    quantity: pos.quantity,
+                    unrealizedPnL: pos.unrealizedPnL
+                }));
             }
             res.json(portfolio);
         }

@@ -18,9 +18,17 @@ class RedisService extends events_1.EventEmitter {
             totalOperations: 0,
             connectionStatus: 'disconnected'
         };
-        // Check if Redis URL is provided by Heroku or environment
-        if (!redisUrl) {
-            console.log('🔧 No Redis URL found - running in fallback mode only');
+        // Check if Redis is enabled from settings
+        const redisEnabled = process.env.REDIS_ENABLED !== 'false';
+        if (!redisEnabled) {
+            console.log('🔧 Redis explicitly disabled - running in fallback mode');
+            this.isConnected = false;
+            this.client = null;
+            return;
+        }
+        // Check if Redis URL is provided and valid
+        if (!redisUrl || redisUrl === '') {
+            console.log('🔧 No Redis URL configured - running in fallback mode');
             this.isConnected = false;
             this.client = null;
             return;

@@ -7,6 +7,11 @@ export interface OrderData {
     price?: string;
     stopPrice?: string;
     timeInForce?: 'GTC' | 'IOC' | 'FOK';
+    reduceOnly?: boolean;
+    closeOnTrigger?: boolean;
+    triggerPrice?: string;
+    triggerDirection?: 'ABOVE' | 'BELOW';
+    category?: 'spot' | 'linear' | 'inverse';
 }
 export interface PositionData {
     symbol: string;
@@ -15,14 +20,19 @@ export interface PositionData {
     markPrice: string;
     unRealizedProfit: string;
     percentage: string;
+    leverage: number;
+    marginType: string;
+    isolatedMargin?: string;
+    liquidationPrice?: string;
 }
 export interface TickerData {
     symbol: string;
-    price: string;
+    price?: string;
+    lastPrice?: string;
     change: string;
     changePercent: string;
     volume: string;
-    quoteVolume: string;
+    quoteVolume?: string;
 }
 export interface KlineData {
     symbol: string;
@@ -46,6 +56,9 @@ export declare class ExchangeConnector extends EventEmitter {
     private testnet;
     private rateLimitCount;
     private rateLimitReset;
+    private bybitConnector?;
+    private readonly isUsingBybit;
+    private priceCache;
     constructor(apiKey: string, apiSecret: string, testnet?: boolean);
     connect(): Promise<void>;
     disconnect(): Promise<void>;
@@ -58,6 +71,10 @@ export declare class ExchangeConnector extends EventEmitter {
     cancelOrder(symbol: string, orderId: number): Promise<any>;
     getOpenOrders(symbol?: string): Promise<any[]>;
     getAccountInfo(): Promise<any>;
+    getBalance(): Promise<any>;
+    getPositions(): Promise<PositionData[]>;
+    setLeverage(symbol: string, leverage: number): Promise<void>;
+    setMarginType(symbol: string, marginType: 'ISOLATED' | 'CROSSED'): Promise<void>;
     subscribeToTicker(symbol: string): void;
     subscribeToKlines(symbol: string, interval: string): void;
     private subscribeToStream;
@@ -70,4 +87,5 @@ export declare class ExchangeConnector extends EventEmitter {
         status: string;
         latency: number;
     }>;
+    getCurrentPrice(symbol: string): number;
 }

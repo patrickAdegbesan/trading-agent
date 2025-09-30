@@ -10,6 +10,8 @@ if (fs.existsSync(paperTradingEnvPath)) {
   console.log('✅ Paper trading environment loaded');
 }
 
+// Redis service is now lazy-loaded via import
+
 import { TradingAgent } from './agents/trading-agent';
 import { LearningAgent } from './agents/learning-agent';
 import { DataCollector } from './market-data/data-collector';

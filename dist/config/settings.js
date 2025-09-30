@@ -12,13 +12,21 @@ dotenv_1.default.config();
 // Environment validation schema
 const envSchema = joi_1.default.object({
     // Binance API
-    BINANCE_API_KEY: joi_1.default.string().required(),
-    BINANCE_API_SECRET: joi_1.default.string().required(),
+    BINANCE_API_KEY: joi_1.default.string().optional().default(''),
+    BINANCE_API_SECRET: joi_1.default.string().optional().default(''),
     BINANCE_TESTNET: joi_1.default.boolean().default(true),
+    // Bybit API
+    BYBIT_API_KEY: joi_1.default.string().required(),
+    BYBIT_API_SECRET: joi_1.default.string().required(),
     // Database
     DATABASE_URL: joi_1.default.string().required(),
     TIMESCALE_DB_URL: joi_1.default.string().optional(),
-    REDIS_URL: joi_1.default.string().default('redis://localhost:6379'),
+    REDIS_ENABLED: joi_1.default.boolean().default(true),
+    REDIS_URL: joi_1.default.string().when('REDIS_ENABLED', {
+        is: true,
+        then: joi_1.default.string().default('redis://localhost:6379'),
+        otherwise: joi_1.default.string().allow('').default(''),
+    }),
     // Trading
     TRADING_PAIRS: joi_1.default.string().default('BTCUSDT,ETHUSDT'),
     INITIAL_CAPITAL: joi_1.default.number().positive().default(10000),
@@ -61,14 +69,20 @@ if (error) {
     throw new Error(`Environment validation error: ${error.message}`);
 }
 exports.settings = {
+    exchange: 'bybit', // Now set to Bybit for live trading
     binance: {
         apiKey: env.BINANCE_API_KEY,
         apiSecret: env.BINANCE_API_SECRET,
         testnet: env.BINANCE_TESTNET,
     },
+    bybit: {
+        apiKey: env.BYBIT_API_KEY,
+        apiSecret: env.BYBIT_API_SECRET,
+    },
     database: {
         url: env.DATABASE_URL,
         timescaleUrl: env.TIMESCALE_DB_URL,
+        redisEnabled: env.REDIS_ENABLED,
         redisUrl: env.REDIS_URL,
     },
     trading: {

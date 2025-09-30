@@ -358,5 +358,24 @@ export class RedisService extends EventEmitter {
     }
 }
 
-// Singleton instance
-export const redisService = new RedisService();
+// Lazy singleton instance - created only when accessed
+let redisServiceInstance: RedisService | null = null;
+
+function getRedisServiceInstance(): RedisService {
+    if (!redisServiceInstance) {
+        redisServiceInstance = new RedisService();
+    }
+    return redisServiceInstance;
+}
+
+// Export a proxy object that delegates to the lazy instance
+export const redisService = new Proxy({} as RedisService, {
+    get(target, prop) {
+        const instance = getRedisServiceInstance();
+        const value = (instance as any)[prop];
+        if (typeof value === 'function') {
+            return value.bind(instance);
+        }
+        return value;
+    }
+});

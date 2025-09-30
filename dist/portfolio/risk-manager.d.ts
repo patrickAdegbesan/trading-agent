@@ -38,6 +38,7 @@ export interface TradeSignal {
     takeProfit?: number;
     expectedReturn?: number;
     winProbability?: number;
+    entryPrice?: number;
     timestamp: number;
 }
 export interface RiskAssessment {

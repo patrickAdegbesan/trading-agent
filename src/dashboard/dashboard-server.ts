@@ -177,17 +177,25 @@ export class DashboardServer {
                 activeOrdersCount = validTrades.filter((t: any) => t.status === 'PENDING').length;
             }
             
+            // Filter performance data to last 24 hours for accurate current metrics
+            const now = Date.now();
+            const last24h = now - (24 * 60 * 60 * 1000);
+            const recentPerformance = performance.filter((p: any) => {
+                const timestamp = typeof p.timestamp === 'number' ? p.timestamp : Date.parse(p.timestamp);
+                return timestamp >= last24h;
+            });
+
             const stats = {
                 totalTrades: validTrades.length,
                 activeTrades: activeOrdersCount,
                 completedTrades: validTrades.filter((t: any) => t.status === 'FILLED').length,
                 totalVolume: validTrades.reduce((sum: number, t: any) => sum + (parseFloat(t.quantity) * parseFloat(t.price)), 0),
-                totalPnL: performance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
+                totalPnL: recentPerformance.reduce((sum: number, p: any) => sum + (p.totalPnL || 0), 0),
                 winRate: this.calculateWinRate(validTrades),
                 averageHoldTime: this.calculateAverageHoldTime(validTrades),
                 bestTrade: this.getBestTrade(validTrades),
                 worstTrade: this.getWorstTrade(validTrades),
-                dailyPnL: this.getDailyPnL(performance),
+                dailyPnL: this.getDailyPnL(recentPerformance),
                 lastUpdate: new Date().toISOString()
             };
             
@@ -203,22 +211,22 @@ export class DashboardServer {
         try {
             const limit = parseInt(req.query.limit as string) || 50;
             const trades = await this.databaseService.getTrades();
-            
+
             // Filter out old test data and clearly invalid trades (relaxed for testnet)
             const validTrades = trades.filter((trade: any) => {
                 // Filter out trades with unrealistic prices (relaxed for testnet)
                 if (trade.symbol === 'BTCUSDT' && trade.price < 10000) return false;
                 if (trade.symbol === 'ETHUSDT' && trade.price < 500) return false;
-                
+
                 // Filter out very old trades (older than 7 days)
                 const tradeDate = new Date(trade.timestamp);
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
                 if (tradeDate < sevenDaysAgo) return false;
-                
+
                 return true;
             });
-            
+
             // Get active orders from OrderManager if available
             let activeOrders: any[] = [];
             if (this.tradingAgent) {
@@ -239,10 +247,13 @@ export class DashboardServer {
                     console.warn('Could not get active orders for trades display:', orderError);
                 }
             }
-            
-            // Combine valid trades and active orders
-            const allTrades = [...validTrades, ...activeOrders];
-            
+
+            // Process trades to calculate P&L for sample data format
+            const processedTrades = this.processTradesForDisplay(validTrades);
+
+            // Combine processed trades and active orders
+            const allTrades = [...processedTrades, ...activeOrders];
+
             // Sort by timestamp descending and limit
             const recentTrades = allTrades
                 .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -252,7 +263,7 @@ export class DashboardServer {
                     pnl: trade.pnl || this.calculateTradePnL(trade),
                     duration: trade.duration || this.calculateTradeDuration(trade)
                 }));
-            
+
             res.json(recentTrades);
         } catch (error) {
             console.error('Failed to get trades:', error);
@@ -658,7 +669,7 @@ export class DashboardServer {
     private calculateWinRate(trades: any[]): number {
         const completedTrades = trades.filter(t => t.status === 'closed');
         if (completedTrades.length === 0) return 0;
-        
+
         const winningTrades = completedTrades.filter(t => parseFloat(t.pnl || '0') > 0);
         return (winningTrades.length / completedTrades.length) * 100;
     }
@@ -701,12 +712,94 @@ export class DashboardServer {
             .reduce((sum: number, p: any) => sum + (p.realized_pnl || 0), 0);
     }
 
+    private processTradesForDisplay(trades: any[]): any[] {
+        // Group trades by symbol to match buy/sell pairs
+        const symbolGroups: { [key: string]: any[] } = {};
+
+        // Group trades by symbol
+        trades.forEach(trade => {
+            if (!symbolGroups[trade.symbol]) {
+                symbolGroups[trade.symbol] = [];
+            }
+            symbolGroups[trade.symbol].push(trade);
+        });
+
+        const processedTrades: any[] = [];
+
+        // Process each symbol group
+        Object.keys(symbolGroups).forEach(symbol => {
+            const symbolTrades = symbolGroups[symbol].sort((a, b) =>
+                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+
+            // For sample data, match buy/sell pairs
+            for (let i = 0; i < symbolTrades.length; i++) {
+                const trade = symbolTrades[i];
+
+                if (trade.side === 'BUY') {
+                    // Look for corresponding sell
+                    const sellTrade = symbolTrades.find(t =>
+                        t.side === 'SELL' &&
+                        new Date(t.timestamp).getTime() > new Date(trade.timestamp).getTime()
+                    );
+
+                    if (sellTrade) {
+                        // Calculate P&L for completed trade
+                        const entryPrice = parseFloat(trade.price);
+                        const exitPrice = parseFloat(sellTrade.price);
+                        const quantity = parseFloat(trade.quantity);
+                        const pnl = (exitPrice - entryPrice) * quantity;
+
+                        processedTrades.push({
+                            ...trade,
+                            exit_price: exitPrice,
+                            exit_time: sellTrade.timestamp,
+                            status: 'closed',
+                            pnl: pnl,
+                            duration: this.calculateTradeDuration({
+                                ...trade,
+                                exit_time: sellTrade.timestamp
+                            })
+                        });
+                    } else {
+                        // Open position (buy without sell)
+                        processedTrades.push({
+                            ...trade,
+                            status: 'FILLED',
+                            pnl: 0,
+                            duration: 'Active'
+                        });
+                    }
+                } else if (trade.side === 'SELL') {
+                    // Check if this sell was already processed with a buy
+                    const alreadyProcessed = processedTrades.some(pt =>
+                        pt.symbol === trade.symbol &&
+                        pt.side === 'BUY' &&
+                        pt.exit_time === trade.timestamp
+                    );
+
+                    if (!alreadyProcessed) {
+                        // Sell without corresponding buy (short position) or unmatched sell
+                        processedTrades.push({
+                            ...trade,
+                            status: 'FILLED',
+                            pnl: 0,
+                            duration: 'Active'
+                        });
+                    }
+                }
+            }
+        });
+
+        return processedTrades;
+    }
+
     private calculateTradePnL(trade: any): number {
         if (trade.status === 'closed' && trade.exit_price) {
             const entry = parseFloat(trade.price);
             const exit = parseFloat(trade.exit_price);
             const quantity = parseFloat(trade.quantity);
-            
+
             if (trade.side === 'BUY') {
                 return (exit - entry) * quantity;
             } else {

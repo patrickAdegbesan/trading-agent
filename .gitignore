@@ -5,10 +5,9 @@ yarn-debug.log*
 yarn-error.log*
 
 # Environment files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env
+.env.*
+!.env.template
 
 # Logs
 logs/
@@ -45,6 +44,10 @@ jspm_packages/
 *.db
 *.sqlite
 trading.db
+
+# Trading data and logs
+trading_data/
+logs/
 
 # PM2 files
 ecosystem.config.js

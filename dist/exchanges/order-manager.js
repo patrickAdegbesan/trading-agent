@@ -97,8 +97,9 @@ class OrderManager extends events_1.EventEmitter {
                 symbol: symbol,
                 side: side,
                 type: 'MARKET',
-                quantity: formattedQuantity
-                // Note: timeInForce not allowed for MARKET orders
+                quantity: formattedQuantity,
+                category: 'spot', // Default to spot trading
+                timeInForce: 'GTC' // Bybit requires this even for market orders
             };
             // Place order via exchange
             const result = await this.exchangeConnector.placeOrder(orderData);
@@ -123,19 +124,34 @@ class OrderManager extends events_1.EventEmitter {
         }
         catch (error) {
             console.error(`❌ Failed to place market order:`, error);
-            // Handle specific Binance errors
-            if (error.message?.includes('LOT_SIZE') || error.message?.includes('Filter failure: LOT_SIZE')) {
-                console.error(`🚫 LOT_SIZE filter violation for ${symbol}:`, error.message);
+            // Handle exchange-specific errors
+            if (error.message?.includes('LOT_SIZE') || error.message?.includes('Filter failure: LOT_SIZE') ||
+                error.message?.includes('ErrQtyLessThanMinQty')) { // Bybit error
+                console.error(`🚫 Quantity filter violation for ${symbol}:`, error.message);
                 console.log(`Original quantity: ${quantity}, formatted: ${this.formatQuantity(symbol, quantity)}`);
                 return {
                     success: false,
-                    reason: `LOT_SIZE filter violation: Quantity ${quantity} invalid for ${symbol}. Check minimum order size requirements.`
+                    reason: `Order quantity invalid for ${symbol}. Check minimum order size requirements.`
                 };
             }
-            if (error.message?.includes('NOTIONAL') || error.message?.includes('MIN_NOTIONAL')) {
+            if (error.message?.includes('NOTIONAL') || error.message?.includes('MIN_NOTIONAL') ||
+                error.message?.includes('ErrOrderAmountLessThanMinimum')) { // Bybit error
                 return {
                     success: false,
                     reason: `Order value too small: Minimum notional value not met for ${symbol}`
+                };
+            }
+            // Handle Bybit-specific errors
+            if (error.message?.includes('ErrExceedMaxOrderQty')) {
+                return {
+                    success: false,
+                    reason: `Order quantity exceeds maximum allowed for ${symbol}`
+                };
+            }
+            if (error.message?.includes('ErrInsufficientBalance')) {
+                return {
+                    success: false,
+                    reason: `Insufficient balance to place order for ${symbol}`
                 };
             }
             return {
@@ -159,9 +175,13 @@ class OrderManager extends events_1.EventEmitter {
                     side: stopLossSide,
                     type: 'STOP_LOSS_LIMIT',
                     quantity: this.formatQuantity(symbol, quantity),
-                    stopPrice: stopLoss.toString(),
-                    price: (stopLoss * 0.999).toString(), // Slight adjustment for limit price
-                    timeInForce: 'GTC'
+                    price: (stopLoss * 0.999).toString(), // Limit price slightly below stop for sells, above for buys
+                    triggerPrice: stopLoss.toString(), // Bybit uses triggerPrice instead of stopPrice
+                    triggerDirection: side === 'BUY' ? 'BELOW' : 'ABOVE', // Set trigger direction based on position side
+                    timeInForce: 'GTC',
+                    category: 'spot',
+                    reduceOnly: true, // Ensure this order only reduces position
+                    closeOnTrigger: true // Force close position when triggered
                 };
                 const result = await this.exchangeConnector.placeOrder(orderData);
                 const orderInfo = {
@@ -194,7 +214,10 @@ class OrderManager extends events_1.EventEmitter {
                     type: 'LIMIT',
                     quantity: this.formatQuantity(symbol, quantity),
                     price: takeProfit.toString(),
-                    timeInForce: 'GTC'
+                    timeInForce: 'GTC',
+                    category: 'spot',
+                    reduceOnly: true, // Ensure this order only reduces position
+                    closeOnTrigger: true // Force close position when triggered
                 };
                 const result = await this.exchangeConnector.placeOrder(orderData);
                 const orderInfo = {
@@ -302,7 +325,11 @@ class OrderManager extends events_1.EventEmitter {
      * Get active orders (not filled or cancelled)
      */
     getActiveOrders() {
-        return Array.from(this.orders.values()).filter(order => order.status === 'SUBMITTED' || order.status === 'PENDING');
+        return Array.from(this.orders.values()).filter(order => order.status === 'SUBMITTED' || order.status === 'PENDING').map(order => ({
+            ...order,
+            entryPrice: order.riskAssessment?.adjustedSignal?.entryPrice || 0,
+            currentPrice: this.exchangeConnector.getCurrentPrice(order.symbol)
+        }));
     }
     /**
      * Check if there are active orders for a specific symbol

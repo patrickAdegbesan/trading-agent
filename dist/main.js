@@ -25,7 +25,8 @@ const database_service_1 = require("./database/database-service");
 const settings_1 = require("./config/settings");
 const dashboard_server_1 = require("./dashboard/dashboard-server");
 // Import Redis service for background caching (optional)
-const redis_service_1 = require("./cache/redis-service");
+const dev_redis_service_1 = require("./cache/dev-redis-service");
+const redisService = dev_redis_service_1.devRedisService; // Use development mode Redis service
 // Add global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {
     console.error('🚨 Uncaught Exception:', error.message);
@@ -44,21 +45,15 @@ async function main() {
         const lastProcessedData = new Map();
         const MIN_PRICE_CHANGE_PERCENT = 0.1; // Only process if price changed by at least 0.1%
         const MIN_TIME_BETWEEN_PREDICTIONS = 30000; // Minimum 30 seconds between predictions
-        // Initialize Redis cache service
-        // Optional: Initialize Redis cache (non-blocking)
-        console.log('🔗 Connecting to Redis cache...');
-        try {
-            await redis_service_1.redisService.connect();
-            console.log('✅ Redis cache connected successfully');
-        }
-        catch (error) {
-            console.warn('⚠️ Redis cache connection failed, continuing without caching:', error instanceof Error ? error.message : String(error));
-        }
+        // Initialize Redis cache service (disabled for paper trading)
+        console.log('ℹ️ Redis cache disabled for paper trading mode');
+        redisService.setEnabled(false);
         // Initialize database service first
         const databaseService = new database_service_1.DatabaseService('./trading_data');
         await databaseService.initialize();
         // Initialize core components with proper parameters
-        const exchangeConnector = new exchange_connector_1.ExchangeConnector(settings_1.settings.binance.apiKey, settings_1.settings.binance.apiSecret, settings_1.settings.binance.testnet);
+        const exchangeConnector = new exchange_connector_1.ExchangeConnector(settings_1.settings.exchange === 'bybit' ? settings_1.settings.bybit.apiKey : settings_1.settings.binance.apiKey, settings_1.settings.exchange === 'bybit' ? settings_1.settings.bybit.apiSecret : settings_1.settings.binance.apiSecret, true // Always use testnet for paper trading
+        );
         // Create data collector (keep synchronous interface)
         const dataCollector = new data_collector_1.DataCollector(exchangeConnector, settings_1.settings.trading.pairs);
         const portfolioManager = new portfolio_manager_1.PortfolioManager(settings_1.settings.trading.initialCapital);
@@ -83,11 +78,11 @@ async function main() {
         console.log('🔧 Setting up Redis health monitoring...');
         setInterval(async () => {
             try {
-                const health = await redis_service_1.redisService.healthCheck();
+                const health = await redisService.healthCheck();
                 if (!health.connected) {
                     console.warn('⚠️ Redis health check failed:', health.error);
                     console.log('🔄 Attempting Redis reconnection...');
-                    const reconnected = await redis_service_1.redisService.reconnect();
+                    const reconnected = await redisService.reconnect();
                     if (reconnected) {
                         console.log('✅ Redis reconnected successfully');
                     }

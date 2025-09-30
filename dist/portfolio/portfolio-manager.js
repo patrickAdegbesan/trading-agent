@@ -18,9 +18,14 @@ class PortfolioManager extends events_1.EventEmitter {
      * Get current portfolio status
      */
     async getPortfolio() {
+        const positions = Array.from(this.positions.values()).map(pos => ({
+            ...pos,
+            unrealizedPnL: (pos.currentPrice - pos.entryPrice) * pos.quantity
+        }));
+        const totalValue = await this.getTotalValue();
         return {
-            totalValue: await this.getTotalValue(),
-            positions: Object.fromEntries(Array.from(this.positions.entries()).map(([symbol, pos]) => [symbol, pos.quantity]))
+            totalValue,
+            positions: Object.fromEntries(positions.map(pos => [pos.symbol, pos.quantity]))
         };
     }
     /**

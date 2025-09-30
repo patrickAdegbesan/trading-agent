@@ -15,7 +15,7 @@ const envSchema = Joi.object({
   // Database
   DATABASE_URL: Joi.string().required(),
   TIMESCALE_DB_URL: Joi.string().optional(),
-  REDIS_URL: Joi.string().default('redis://localhost:6379'),
+  REDIS_URL: Joi.string().optional(),
 
   // Trading
   TRADING_PAIRS: Joi.string().default('BTCUSDT,ETHUSDT'),
@@ -76,7 +76,7 @@ export interface TradingConfig {
   database: {
     url: string;
     timescaleUrl?: string;
-    redisUrl: string;
+    redisUrl?: string;
   };
   trading: {
     pairs: string[];

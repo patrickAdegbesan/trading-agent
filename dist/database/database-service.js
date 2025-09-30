@@ -62,7 +62,6 @@ class DatabaseService extends events_1.EventEmitter {
     async updatePosition(symbol, currentPrice, trades) {
         const positionId = `pos_${symbol}`;
         let position = this.db.getPosition(positionId);
-        // Calculate position size and PnL from trades
         let totalSize = 0;
         let totalCost = 0;
         let realizedPnL = 0;

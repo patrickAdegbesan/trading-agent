@@ -192,9 +192,17 @@ class DataCollector extends events_1.EventEmitter {
                             // Get current price via REST API
                             const ticker = await this.exchangeConnector.getTickerData(symbol);
                             if (ticker) {
-                                const price = parseFloat(ticker.price);
-                                this.currentPrices.set(symbol, price);
-                                this.emit('priceUpdate', { symbol, price, timestamp: now });
+                                const price = parseFloat(ticker.lastPrice || ticker.price || '0');
+                                const volume = parseFloat(ticker.volume || '0');
+                                if (price > 0) { // Only update if we got a valid price
+                                    this.currentPrices.set(symbol, price);
+                                    this.emit('priceUpdate', {
+                                        symbol,
+                                        price,
+                                        volume,
+                                        timestamp: now
+                                    });
+                                }
                                 // Also get recent kline data
                                 const klines = await this.exchangeConnector.getKlines(symbol, '1m', 1);
                                 if (klines && klines.length > 0) {
@@ -288,7 +296,7 @@ class DataCollector extends events_1.EventEmitter {
     }
     processTickerData(tickerData) {
         try {
-            const price = parseFloat(tickerData.price);
+            const price = parseFloat(tickerData.lastPrice || tickerData.price || '0');
             if (isNaN(price) || price <= 0) {
                 return;
             }
@@ -296,9 +304,9 @@ class DataCollector extends events_1.EventEmitter {
             this.emit('priceUpdate', {
                 symbol: tickerData.symbol,
                 price,
-                change: parseFloat(tickerData.change),
-                changePercent: parseFloat(tickerData.changePercent),
-                volume: parseFloat(tickerData.volume)
+                change: parseFloat(tickerData.change || '0'),
+                changePercent: parseFloat(tickerData.changePercent || '0'),
+                volume: parseFloat(tickerData.volume || '0')
             });
         }
         catch (error) {
