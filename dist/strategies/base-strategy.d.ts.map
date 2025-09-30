@@ -1,1 +1,0 @@
-{"version":3,"file":"base-strategy.d.ts","sourceRoot":"","sources":["../../src/strategies/base-strategy.ts"],"names":[],"mappings":"AAAA,qBAAa,YAAY;IACrB,eAAe,CAAC,UAAU,EAAE,GAAG,GAAG,GAAG;IAIrC,mBAAmB,CAAC,MAAM,EAAE,GAAG,EAAE,GAAG,GAAG;CAiC1C"}

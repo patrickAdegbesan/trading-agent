@@ -49,6 +49,12 @@ trading.db
 trading_data/
 logs/
 
+# Build outputs
+dist/
+
+# Test data
+test_trading_data/
+
 # PM2 files
 ecosystem.config.js
 
